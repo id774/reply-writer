@@ -1,0 +1,10 @@
+# Markdown documents. A document named with .md is covered by this line and
+# needs no entry of its own.
+*.md diff=markdown
+
+# No file is given linguist-language. Nothing here makes GitHub render a
+# document that carries no extension; that is what the .md names are for.
+
+# doc/VERSIONS is underlined plain text, not Markdown. With diff=markdown its
+# hunk headers lose the version line they now carry. doc/COPYING and
+# doc/COPYING.LESSER are the licence texts.
