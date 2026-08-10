@@ -25,7 +25,7 @@ The phone is the environment this is built for. Its main use is the few minutes 
 
 Requirements and basic design. Nothing is implemented yet.
 
-[doc/REQUIREMENTS.md](doc/REQUIREMENTS.md) is settled, and [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md) takes it down to the modules, the settings, the routes and the deployment layout that implementation follows. The prompt specification, the deployment guide and the implementation policy come next; this README will grow the installation, configuration and usage sections once there is something to install.
+[doc/REQUIREMENTS.md](doc/REQUIREMENTS.md) is settled, [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md) takes it down to the modules, the settings, the routes and the deployment layout that implementation follows, and [doc/POLICY.md](doc/POLICY.md) states the rules that implementation is written under. The prompt specification and the deployment guide come next; this README will grow the installation, configuration and usage sections once there is something to install.
 
 ## What it does
 
@@ -52,7 +52,7 @@ Checking the final text and sending it stay with the person. Section 13 of the r
 - Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
 - The prompts: `doc/PROMPTS.md` (not written yet)
 - Deployment: `doc/DEPLOYMENT.md` (not written yet)
-- Implementation policy: `doc/POLICY.md` (not written yet)
+- Implementation policy: [doc/POLICY.md](doc/POLICY.md)
 - Release history: [doc/VERSIONS](doc/VERSIONS)
 
 Each of them stands on its own. What this repository needs is written in this repository, and no document here is completed by one kept somewhere else.
