@@ -23,9 +23,9 @@ The phone is the environment this is built for. Its main use is the few minutes 
 
 ## Status
 
-Requirements only. Nothing is implemented yet.
+Requirements and basic design. Nothing is implemented yet.
 
-[doc/REQUIREMENTS.md](doc/REQUIREMENTS.md) is settled and is what implementation follows. The basic design, the prompt specification, the deployment guide and the implementation policy come next; this README will grow the installation, configuration and usage sections once there is something to install.
+[doc/REQUIREMENTS.md](doc/REQUIREMENTS.md) is settled, and [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md) takes it down to the modules, the settings, the routes and the deployment layout that implementation follows. The prompt specification, the deployment guide and the implementation policy come next; this README will grow the installation, configuration and usage sections once there is something to install.
 
 ## What it does
 
@@ -49,7 +49,7 @@ Checking the final text and sending it stay with the person. Section 13 of the r
 ## Documents
 
 - Requirements: [doc/REQUIREMENTS.md](doc/REQUIREMENTS.md)
-- Basic design: `doc/BASIC_DESIGN.md` (not written yet)
+- Basic design: [doc/BASIC_DESIGN.md](doc/BASIC_DESIGN.md)
 - The prompts: `doc/PROMPTS.md` (not written yet)
 - Deployment: `doc/DEPLOYMENT.md` (not written yet)
 - Implementation policy: `doc/POLICY.md` (not written yet)
