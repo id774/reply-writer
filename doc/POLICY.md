@@ -645,11 +645,10 @@ finally intended, and merges as if it had been written that way.
   `v1.9` -> `v2.0`).
 - Do not continue `minor` past `9` as in standard semantic versioning
   (do not use `v1.10`, `v1.11`, ...).
-- A change that is not backward compatible bumps `major` and resets `minor` to
-  `0`, whatever `minor` currently stands at. Reaching `10` is not the only
-  reason to raise `major`. Removing or renaming an option or a setting,
-  changing what an existing one means, and changing a default so that an
-  unchanged invocation does something else are all incompatible changes.
+- Raising `major` for a reason other than the rollover is a decision the
+  maintainer makes, not one this document derives from the change. An
+  incompatible change is described as such in `doc/VERSIONS` and in the
+  `Version History` entry, and the number it is released under is chosen then.
 
 #### 2.7.3 Repository Versioning
 - Repository release versions are independent of individual module versions.
