@@ -1,0 +1,32 @@
+# Example systemd unit. Copy it to /etc/systemd/system/ and adjust the
+# user, the paths and the port before enabling it.
+#
+# The unit carries no hostname, no certificate and no credential. The
+# settings, the API token among them, live in the EnvironmentFile,
+# which is kept readable by the service user only.
+
+[Unit]
+Description=reply-writer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reply
+Group=reply
+WorkingDirectory=/opt/reply-writer
+EnvironmentFile=/opt/reply-writer/.env
+# 127.0.0.1 only. Apache is the entrance from outside, and gunicorn is
+# never exposed to the internet directly. The timeout sits above
+# GENERATION_TIMEOUT (120) and below the Apache ProxyTimeout (300).
+ExecStart=/opt/reply-writer/.venv/bin/gunicorn app:app \
+          --bind 127.0.0.1:8091 --workers 2 --timeout 240
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

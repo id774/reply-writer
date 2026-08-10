@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>Nothing was sent anywhere. What you pasted is still below.</p>
+
+<form method="post" action="{{ url_for('generate') }}">
+  <label for="message">Message you are replying to</label>
+  <textarea id="message" name="message" lang="ja" rows="10" maxlength="{{ max_input_chars }}">{{ message or "" }}</textarea>
+
+  <label for="direction">Direction <span class="optional">(optional)</span></label>
+  <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}">{{ direction or "" }}</textarea>
+
+  <div class="buttons">
+    <button type="submit">Generate once more</button>
+    <a href="{{ url_for('index') }}">Back to the input screen</a>
+  </div>
+</form>
+{% endblock %}
