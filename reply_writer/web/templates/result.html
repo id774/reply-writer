@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+{# The subject is absent from the page where the reply carries none,
+   rather than present and empty, so that nothing invites a subject to
+   be pasted into a medium that has none. #}
+{% if draft.subject %}
+<section>
+  <h2>Subject</h2>
+  <p class="subject-row"><span id="reply-subject" lang="ja">{{ draft.subject }}</span>
+    <button type="button" data-copy-target="reply-subject">Copy the subject</button></p>
+</section>
+{% endif %}
+
+<section>
+  <h2>Reply</h2>
+  {# The element holds the reply and nothing else, so that what is
+     copied is that text alone: no label, no notice, nothing internal. #}
+  <textarea id="reply-body" lang="ja" readonly rows="16">{{ draft.body }}</textarea>
+  <div class="buttons">
+    <button type="button" data-copy-target="reply-body">Copy the reply</button>
+  </div>
+</section>
+
+<p class="handover">Read it once more, then send it from the application the message came from.</p>
+
+{% if draft.notices %}
+<section class="notices">
+  <h2>Notices</h2>
+  <ul>{% for notice in draft.notices %}<li>{{ notice }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<details>
+  <summary>Change the direction and generate again</summary>
+  <form method="post" action="{{ url_for('generate') }}">
+    <label for="message">Message you are replying to</label>
+    <textarea id="message" name="message" lang="ja" rows="8" maxlength="{{ max_input_chars }}">{{ message }}</textarea>
+
+    <label for="direction">Direction <span class="optional">(optional)</span></label>
+    <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}">{{ direction }}</textarea>
+
+    <div class="buttons">
+      <button type="submit">Generate again</button>
+    </div>
+  </form>
+</details>
+
+<p class="meta"><a href="{{ url_for('index') }}">Start a new one</a></p>
+{% endblock %}

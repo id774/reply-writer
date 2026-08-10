@@ -1,0 +1,9 @@
+# Local configuration holding the API token.
+.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/

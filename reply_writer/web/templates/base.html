@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{% block title %}reply-writer{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+<h1><a href="{{ url_for('index') }}">reply-writer</a></h1>
+</header>
+<main>
+{% if error %}<p class="error">{{ error }}{% if request_id %} (request {{ request_id }}){% endif %}</p>{% endif %}
+{% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static', filename='copy.js') }}"></script>
+</body>
+</html>

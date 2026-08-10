@@ -1,0 +1,7 @@
+# Runtime dependencies of reply-writer.
+# Versions are pinned to a compatible range so that a future major
+# release cannot break a running service.
+Flask>=3.0,<4.0
+openai>=1.40,<2.0
+python-dotenv>=1.0,<2.0
+gunicorn>=21.2,<24.0

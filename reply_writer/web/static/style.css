@@ -1,0 +1,96 @@
+/* Mobile first. The desktop layout is what this becomes when there is
+   room, not a desktop layout shrunk to fit a phone. No fixed width, no
+   horizontal scroll, and no action that needs a hover to be found. */
+
+* { box-sizing: border-box; }
+
+body {
+  color: #1c1c1c;
+  font-family: system-ui, sans-serif;
+  line-height: 1.7;
+  margin: 0 auto;
+  max-width: 44rem;
+  padding: 0.8rem 1rem 3rem;
+}
+
+h1 { font-size: 1.2rem; margin: 0.6rem 0; }
+h1 a { color: inherit; text-decoration: none; }
+h2 { font-size: 1rem; margin: 1.2rem 0 0.3rem; }
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-top: 1rem;
+}
+
+.optional { color: #666; font-weight: 400; }
+.hint { color: #666; font-size: 0.85rem; margin: 0.1rem 0 0.3rem; }
+
+textarea {
+  font-family: inherit;
+  /* 16px keeps a phone browser from zooming in on focus, which is what
+     leaves a page scrolling sideways afterwards. */
+  font-size: 1rem;
+  line-height: 1.7;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.9rem 0; }
+
+button {
+  background: #f2f2f2;
+  border: 1px solid #999;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  /* Large enough to be pressed with a thumb. */
+  min-height: 2.75rem;
+  padding: 0.5rem 1.1rem;
+}
+
+button[type="submit"] {
+  background: #1c4f7c;
+  border-color: #1c4f7c;
+  color: #fff;
+  flex: 1 1 12rem;
+}
+
+.subject-row {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#reply-subject {
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  display: block;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  /* A long subject wraps rather than pushing the page sideways. */
+  overflow-wrap: anywhere;
+}
+
+.error {
+  background: #fdf0f0;
+  border: 1px solid #c99;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+
+.handover { color: #444; font-size: 0.9rem; }
+.notices { color: #555; font-size: 0.9rem; }
+.meta { font-size: 0.9rem; margin-top: 1.5rem; }
+.copied { color: #276; font-size: 0.9rem; }
+
+details { margin-top: 1.5rem; }
+summary { cursor: pointer; padding: 0.5rem 0; }
+
+@media (min-width: 40rem) {
+  .subject-row { align-items: center; flex-direction: row; }
+  #reply-subject { width: auto; flex: 1 1 auto; }
+  button[type="submit"] { flex: 0 0 auto; }
+}
