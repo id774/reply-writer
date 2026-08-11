@@ -81,7 +81,12 @@ def _unwrap_fence(content: str) -> str:
         return text
 
     inner = "\n".join(lines[1:-1])
-    if "```" in inner:
+    # A further fence is one that opens a line. The answer is a JSON
+    # object, whose strings hold no line break, so a reply that speaks
+    # of a fence carries those characters in the middle of a line and
+    # is not a second fence: refusing on the characters alone would
+    # throw away a well formed answer for what the reply says.
+    if any(line.lstrip().startswith("```") for line in inner.split("\n")):
         return text
     return inner.strip()
 
@@ -193,6 +198,14 @@ def generate_reply(message: str, direction: str, config: Config,
 
     body, notices = normalize_body(_body(payload))
     subject = normalize_subject(_subject(payload))
+
+    # The body was answered and is empty once the markup around it has
+    # gone, which leaves nothing to copy. It is refused here rather
+    # than shown, because a blank draft on the screen reads as a fault
+    # of the screen and tells the person nothing to do about it.
+    if not body:
+        logger.error("The answer carries no body outside its markup")
+        raise InvalidResponseError()
 
     return ReplyDraft(
         body=body,

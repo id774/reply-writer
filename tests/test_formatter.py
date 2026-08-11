@@ -31,6 +31,7 @@
 #    - Remove trailing spaces from every line.
 #    - Remove a code fence wrapping the whole reply, and say so.
 #    - Leave a fence inside a reply alone.
+#    - Leave a reply of two fenced blocks whole.
 #    - Raise no notice for an ordinary reply.
 #    - Change no word of the reply.
 #    - Fold a subject onto one line.
@@ -92,6 +93,20 @@ class NormalizeBodyTest(unittest.TestCase):
         quoted = "こちらの記録です。\n\n```\nstatus=ok\n```\n\n以上です。"
         body, notices = normalize_body(quoted)
         self.assertEqual(body, quoted)
+        self.assertEqual(notices, [])
+
+    def test_leaves_a_reply_of_two_fenced_blocks_whole(self):
+        """
+        Keep a reply that begins and ends with a fence of its own.
+
+        Two blocks with a sentence between them look like one wrapped
+        reply from the first and the last line alone. Removing those
+        lines would open the first block and close nothing, so the text
+        pasted into a message would be broken markup.
+        """
+        two_blocks = "```\nA\n```\n\nはい\n\n```\nB\n```"
+        body, notices = normalize_body(two_blocks)
+        self.assertEqual(body, two_blocks)
         self.assertEqual(notices, [])
 
     def test_raises_no_notice_for_an_ordinary_reply(self):

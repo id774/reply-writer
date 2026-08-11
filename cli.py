@@ -41,9 +41,10 @@
 #  - --model NAME / --prompt-dir DIR / --timeout SECONDS
 #      Override GENERATION_MODEL, PROMPT_DIR and GENERATION_TIMEOUT for
 #      this invocation. --timeout is held to the rule
-#      GENERATION_TIMEOUT follows, a number greater than zero. The API
-#      token and the base URL have no option on purpose: the token is a
-#      secret, and the endpoint is a decision of the deployment.
+#      GENERATION_TIMEOUT follows, a finite number greater than zero.
+#      The API token and the base URL have no option on purpose: the
+#      token is a secret, and the endpoint is a decision of the
+#      deployment.
 #  - --json
 #      Print the draft as JSON instead of as text.
 #
@@ -72,6 +73,7 @@ import argparse
 import dataclasses
 import json
 import logging
+import math
 import sys
 from typing import Optional
 
@@ -171,9 +173,12 @@ def main() -> int:
 
     # Repeat the check load_config() performs on GENERATION_TIMEOUT.
     # The override lands after it has run, so a value refused there
-    # would otherwise reach the SDK through the option instead.
+    # would otherwise reach the SDK through the option instead. 'nan'
+    # is held to the same rule explicitly: argparse reads it as a
+    # float, and every comparison against it is false, so the test for
+    # a positive number lets it through on its own.
     if arguments.timeout is not None:
-        if arguments.timeout <= 0:
+        if not math.isfinite(arguments.timeout) or arguments.timeout <= 0:
             logger.error("--timeout is %s; expected a positive number.",
                          arguments.timeout)
             return 1

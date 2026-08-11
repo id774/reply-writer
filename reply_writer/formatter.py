@@ -48,11 +48,23 @@ def _normalize_newlines(text: str) -> str:
 
 
 def _strip_outer_fence(text: str) -> Tuple[str, bool]:
-    """ Remove a code fence wrapping the whole reply. """
+    """
+    Remove a code fence wrapping the whole reply.
+
+    Only a fence around the whole of it is removed. A reply carrying
+    two fenced blocks of its own, with text between them, begins and
+    ends with a fence as well, and dropping its first and last lines
+    would leave the markup in the middle broken. Where a fence stands
+    inside, the text is left as it is.
+    """
     lines = text.strip().split("\n")
-    if len(lines) >= 2 and FENCE.match(lines[0]) and FENCE.match(lines[-1]):
-        return "\n".join(lines[1:-1]).strip(), True
-    return text.strip(), False
+    if len(lines) < 2:
+        return text.strip(), False
+    if not FENCE.match(lines[0]) or not FENCE.match(lines[-1]):
+        return text.strip(), False
+    if any(FENCE.match(line) for line in lines[1:-1]):
+        return text.strip(), False
+    return "\n".join(lines[1:-1]).strip(), True
 
 
 def normalize_body(text: str) -> Tuple[str, List[str]]:

@@ -125,7 +125,17 @@ class OpenAICompatibleProvider:
 
     def _create(self, client: Any, request: Dict[str, Any], config: Config,
                 started: float, request_id: str) -> Any:
-        """ Perform the one API call and map its failures. """
+        """
+        Perform the one API call and map its failures.
+
+        The three cases told apart are the ones an operator acts on
+        differently: a wait that ran out, a connection that never
+        stood, and an answer the endpoint refused. Any remaining error
+        of the SDK is mapped as well and last, because it is a subclass
+        of none of them: leaving it to travel upwards would put a class
+        of the client library in front of the person, which is what
+        reply_writer.errors exists to prevent.
+        """
         import openai
 
         try:
@@ -141,6 +151,11 @@ class OpenAICompatibleProvider:
                               getattr(error, "status_code", None), started,
                               request_id)
             raise UpstreamStatusError()
+        except openai.APIError as error:
+            self._log_failure(config, error,
+                              getattr(error, "status_code", None), started,
+                              request_id)
+            raise InvalidResponseError()
 
     def _log_failure(self, config: Config, error: Exception,
                      status_code: Optional[int], started: float,

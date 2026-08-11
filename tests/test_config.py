@@ -33,6 +33,7 @@
 #    - Treat a blank or whitespace-only value as unset.
 #    - Send no temperature unless GENERATION_TEMPERATURE is set.
 #    - Refuse a value that is not a number, naming the setting.
+#    - Refuse a value float() reads as nan or as infinity.
 #    - Refuse a timeout that is not positive.
 #    - Refuse a negative retry count.
 #    - Refuse an unknown response mode, naming the accepted ones.
@@ -157,6 +158,24 @@ class LoadConfigTest(unittest.TestCase):
             self.load(GENERATION_TIMEOUT="soon")
         self.assertIn("GENERATION_TIMEOUT", str(refusal.exception))
         self.assertIn("soon", str(refusal.exception))
+
+    def test_refuses_a_value_that_is_not_finite(self):
+        """
+        Refuse nan and infinity, which float() accepts as numbers.
+
+        Each of these settings bounds something, and neither value can
+        bound anything: nan compares false against any limit, and
+        infinity cannot become the whole number a count of characters
+        or a port has to be. Refusing them here names the setting at
+        fault instead of failing later inside arithmetic.
+        """
+        for name in ("GENERATION_TIMEOUT", "GENERATION_TEMPERATURE",
+                     "MAX_INPUT_CHARS", "MAX_POLICY_CHARS",
+                     "MAX_OUTPUT_TOKENS", "GENERATION_MAX_RETRIES", "PORT"):
+            for value in ("nan", "inf", "-inf", "1e400"):
+                with self.assertRaises(ConfigError) as refusal:
+                    self.load(**{name: value})
+                self.assertIn(name, str(refusal.exception))
 
     def test_refuses_a_timeout_that_is_not_positive(self):
         """ Refuse a limit no request could ever run inside. """

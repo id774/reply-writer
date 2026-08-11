@@ -83,6 +83,7 @@
 #
 ########################################################################
 
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Optional
@@ -149,9 +150,19 @@ def _number(name: str, default: float) -> float:
     if not raw:
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError:
         raise ConfigError("{0} must be a number, got '{1}'".format(name, raw))
+    # 'nan' and 'inf' are numbers float() accepts and no setting can
+    # use: a comparison against nan is false whichever way it is
+    # written, so a limit checked below would pass one through to the
+    # SDK, and an infinite value cannot become the integer a whole
+    # setting needs. Refusing both here names the setting at fault
+    # instead of failing later as a bare arithmetic error.
+    if not math.isfinite(value):
+        raise ConfigError(
+            "{0} is '{1}'; expected a finite number.".format(name, raw))
+    return value
 
 
 def _whole(name: str, default: int, minimum: int) -> int:

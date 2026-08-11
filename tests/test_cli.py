@@ -45,6 +45,7 @@
 #    - Print the draft as JSON on request.
 #    - Override GENERATION_MODEL, PROMPT_DIR and GENERATION_TIMEOUT.
 #    - Refuse a timeout that is not positive, before a request.
+#    - Refuse a timeout that is not finite, before a request.
 #    - Refuse a configuration that cannot address an endpoint, exiting 1.
 #    - Exit 1 on an unreadable message file.
 #    - Exit 1 on an empty message, and on an upstream failure.
@@ -311,6 +312,23 @@ class OverrideTest(CliTestCase):
                                "--timeout", "0"])
         self.assertEqual(status, 1)
         self.generate.assert_not_called()
+
+    def test_refuses_a_timeout_that_is_not_finite(self):
+        """
+        Refuse nan and infinity, which argparse reads as numbers.
+
+        A comparison against nan is false whichever way it is written,
+        so the test for a positive number lets it through on its own
+        and the value would reach the SDK as the limit of a request.
+        """
+        # Written as one argument, because a value beginning with a
+        # minus sign reads as another option on its own.
+        for value in ("nan", "inf", "-inf"):
+            status = self.run_cli(["generate", "--message",
+                                   self.message_file,
+                                   "--timeout={0}".format(value)])
+            self.assertEqual(status, 1)
+            self.generate.assert_not_called()
 
 
 class FailureTest(CliTestCase):
