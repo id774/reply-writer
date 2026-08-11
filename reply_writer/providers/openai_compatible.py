@@ -174,14 +174,14 @@ class OpenAICompatibleProvider:
         one that fired well short of it is a connection lost on the
         way, and raising the limit would change nothing.
 
-        The exception is recorded by its class and its own message. An
-        SDK does not put a request body into either, and neither the
-        message nor the reply is passed to this call.
+        Record the exception class but not its message. An SDK may put
+        the upstream response body into an exception message, and that
+        body can contain text that must stay out of the log.
         """
         logger.error(
             "generation failure: request_id=%s backend=%s endpoint_host=%s "
             "model=%s error=%s status=%s upstream_request_id=%s elapsed=%s "
-            "timeout=%s: %s",
+            "timeout=%s",
             request_id or "-",
             config.generation_backend,
             config.endpoint_host,
@@ -191,7 +191,6 @@ class OpenAICompatibleProvider:
             getattr(error, "request_id", None) or "-",
             self._elapsed(started),
             config.generation_timeout,
-            error,
         )
 
     def _elapsed(self, started: float) -> float:
