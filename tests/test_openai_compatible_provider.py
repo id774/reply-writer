@@ -422,6 +422,19 @@ class LogTest(ProviderTestCase):
         self.assertNotIn(TOKEN, line)
         self.assertNotIn(MESSAGES[1]["content"], line)
 
+    def test_keeps_an_upstream_response_body_out_of_a_failure_line(self):
+        """ Record no exception text that may carry an upstream body. """
+        response_body = "private text echoed by the endpoint"
+        with self.assertLogs("reply_writer.providers.openai_compatible",
+                             "ERROR") as recorded:
+            with self.assertRaises(UpstreamStatusError):
+                self.complete(FakeSDK(error=FakeStatusError(response_body,
+                                                            400)))
+        line = "\n".join(recorded.output)
+        self.assertIn("error=FakeStatusError", line)
+        self.assertIn("status=400", line)
+        self.assertNotIn(response_body, line)
+
 
 if __name__ == "__main__":
     unittest.main()
