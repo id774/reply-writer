@@ -4,7 +4,13 @@
 
 * { box-sizing: border-box; }
 
+/* The page is a light one, and says so. A phone left in dark appearance
+   otherwise paints the form controls with its own system colors, which
+   put white button text on the near-white button background set below. */
+:root { color-scheme: light; }
+
 body {
+  background: #fff;
   color: #1c1c1c;
   font-family: system-ui, sans-serif;
   line-height: 1.7;
@@ -38,10 +44,15 @@ textarea {
 
 .buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.9rem 0; }
 
+/* The text color is stated with the background rather than left to the
+   system color a button carries by default, so that the pair is decided
+   here and the label stays legible whatever appearance the phone is in.
+   The submit rule below states its own pair for the same reason. */
 button {
   background: #f2f2f2;
   border: 1px solid #999;
   border-radius: 6px;
+  color: #1c1c1c;
   cursor: pointer;
   font-size: 1rem;
   /* Large enough to be pressed with a thumb. */

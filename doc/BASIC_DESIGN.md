@@ -609,6 +609,7 @@ Mobile first.
 - The direction takes a few lines.
 - The generate button is easy to press.
 - The copy control is easy to press.
+- Every control stays legible in dark appearance.
 - Nothing scrolls sideways.
 - No small fixed width is used.
 - No main action needs a hover.

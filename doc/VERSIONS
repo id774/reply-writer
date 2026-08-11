@@ -1,6 +1,11 @@
 reply-writer Repository Version History
 =======================================
 
+v1.0.1 (Release Date: TBD)
+--------------------------
+- Keep the copy buttons legible on a phone in dark appearance, declaring the
+  light color scheme and stating the button text color with its background.
+
 v1.0 (2026-08-11)
 -----------------
 - Initial release.
