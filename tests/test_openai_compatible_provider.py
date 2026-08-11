@@ -56,6 +56,7 @@
 #    - Map a timeout onto UpstreamTimeoutError.
 #    - Map a connection failure onto UpstreamConnectionError.
 #    - Map 401, 403, 429 and 500 onto one user facing error.
+#    - Map any remaining SDK error onto one of our own.
 #    - Try no second endpoint when the first one fails.
 #    - Record the shape of an answer without its content or the token.
 #    - Record the request id of the generation on both lines.
@@ -92,7 +93,14 @@ MESSAGES = [
 
 
 class FakeError(Exception):
-    """ Base of the exception classes the stand-in SDK raises. """
+    """
+    Base of the exception classes the stand-in SDK raises.
+
+    It stands in for openai.APIError as well, which is the base the
+    real classes share. A stand-in raised as itself is therefore an
+    error of the SDK that belongs to none of the three cases told
+    apart, which is what the provider has to map on its own.
+    """
 
 
 class FakeTimeoutError(FakeError):
@@ -149,6 +157,7 @@ class FakeSDK:
         module.APITimeoutError = FakeTimeoutError
         module.APIConnectionError = FakeConnectionError
         module.APIStatusError = FakeStatusError
+        module.APIError = FakeError
         module.OpenAI = self._client
         test.addCleanup(sys.modules.pop, "openai", None)
         sys.modules["openai"] = module
@@ -338,6 +347,20 @@ class FailureTest(ProviderTestCase):
                 FakeStatusError("refused", status_code=status))
             self.assertIsInstance(error, UpstreamStatusError)
             self.assertIn("status={0}".format(status), "\n".join(recorded))
+
+    def test_maps_any_remaining_sdk_error(self):
+        """
+        Map an error of the SDK that is none of the three cases.
+
+        The package raises more than a timeout, a lost connection and a
+        refused status: an answer it cannot validate is one example.
+        Such an error is mapped here as well, because a class of the
+        client library reaching the web layer is what the error
+        hierarchy exists to prevent.
+        """
+        error, recorded = self.fail_with(FakeError("unreadable answer"))
+        self.assertIsInstance(error, InvalidResponseError)
+        self.assertNotIn(TOKEN, "\n".join(recorded))
 
     def test_tries_no_second_endpoint(self):
         """

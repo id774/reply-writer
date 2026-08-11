@@ -49,6 +49,8 @@
 #    - Refuse an answer with no body, and one whose body is blank.
 #    - Refuse an answer whose body is not a string.
 #    - Unwrap a fenced object under prompt-json.
+#    - Unwrap a fenced object whose reply speaks of a fence.
+#    - Refuse a body that is empty once its markup is removed.
 #    - Refuse an object buried in prose rather than cut it out.
 #    - Refuse a fenced object under json-object mode.
 #    - Report the model the answer named.
@@ -277,6 +279,33 @@ class InvalidAnswerTest(GeneratorTestCase):
         draft = self.generate(fenced,
                               generation_response_mode="prompt-json")
         self.assertEqual(draft.body, REPLY)
+
+    def test_unwraps_a_fenced_object_whose_reply_speaks_of_a_fence(self):
+        """
+        Read the object even where the reply mentions a fence.
+
+        The answer is one JSON object, and a string in it holds no line
+        break, so those characters inside the reply sit in the middle
+        of a line and open no block. Refusing the answer on the
+        characters alone would throw away a reply for what it says.
+        """
+        reply = "コードは ``` で囲んでお送りください。"
+        fenced = "```json\n{0}\n```".format(
+            self.answer(subject=None, body=reply))
+        draft = self.generate(fenced,
+                              generation_response_mode="prompt-json")
+        self.assertEqual(draft.body, reply)
+
+    def test_refuses_a_body_that_is_empty_once_cleaned(self):
+        """
+        Refuse a body holding nothing but the markup around it.
+
+        A body of two fence lines passes the check for a blank field
+        and leaves nothing behind once the fence is removed. An empty
+        draft on the screen reads as a fault of the screen, so the
+        answer is refused instead.
+        """
+        self.refuse(self.answer(subject=None, body="```\n```"))
 
     def test_refuses_an_object_buried_in_prose(self):
         """
