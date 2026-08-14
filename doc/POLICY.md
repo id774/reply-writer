@@ -649,6 +649,10 @@ finally intended, and merges as if it had been written that way.
   maintainer makes, not one this document derives from the change. An
   incompatible change is described as such in `doc/VERSIONS` and in the
   `Version History` entry, and the number it is released under is chosen then.
+- Removing or renaming an option, changing what an existing argument means,
+  changing a default so that an unchanged invocation does something else, and
+  changing how a path or a configuration value is resolved are all incompatible
+  changes in that sense.
 
 #### 2.7.3 Repository Versioning
 - Repository release versions are independent of individual module versions.
@@ -658,8 +662,13 @@ finally intended, and merges as if it had been written that way.
   The first release is v1.0 and the one after it is v1.0.1.
 - Work that is not released yet takes no version of its own: it belongs to the
   entry already standing at the top of `doc/VERSIONS`.
-- An unreleased entry carries `(Release Date: TBD)` until it ships. Replacing
-  that with the actual date is the release itself, not a change to record.
+- An unreleased entry carries `(Release Date: TBD)`, and its version number
+  stays provisional until it ships. An entry opened under one number may be
+  released under another once what accumulated in it is known; which number it
+  takes is decided then. Replacing `TBD` with the actual date is the release
+  itself, not a change to record.
+- A documentation-only change takes no `doc/VERSIONS` entry, unless its scale
+  makes it worth one line saying so.
 - The package version exposed by `reply_writer.__version__` and
   `cli.py --version` tracks the application, and is bumped when a release
   warrants it, not on every change.
@@ -668,6 +677,9 @@ finally intended, and merges as if it had been written that way.
 - `doc/VERSIONS` reads as a version-level summary of overall changes, not a raw
   commit log. It is a plain text document and follows the rules for one stated
   below, with the one exception of line length described here.
+- Each entry opens with a heading of the form `vX.Y.Z (YYYY-MM-DD)`, or
+  `vX.Y.Z (Release Date: TBD)` while it is unreleased, underlined with `-`
+  characters, followed by one `-` bullet per change.
 - Write one coherent change on one physical line. This is the rule, qualified
   once below for a file that has already settled on a form of its own. The file
   is read as a list and reviewed as a diff, and both are served by an entry that
@@ -676,6 +688,9 @@ finally intended, and merges as if it had been written that way.
   aims at. Near 100 columns is the usual target, and an entry that has to name
   a file, a command, a function, an option or a setting may run to about 120
   columns or beyond.
+- That is a deliberate exception in this file, not an oversight in it. Do not
+  rewrap `doc/VERSIONS` to 80 columns, and do not report a long entry here as a
+  violation of that width.
 - These widths are a prompt to check whether an entry explains more than it
   needs to, not a limit to enforce.
 - `doc/VERSIONS` carries these guidelines again at its foot, and an entry
