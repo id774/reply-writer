@@ -32,6 +32,7 @@
 #    - Remove a code fence wrapping the whole reply, and say so.
 #    - Leave a fence inside a reply alone.
 #    - Leave a reply of two fenced blocks whole.
+#    - Leave text following closing fence marks whole.
 #    - Raise no notice for an ordinary reply.
 #    - Change no word of the reply.
 #    - Fold a subject onto one line.
@@ -107,6 +108,13 @@ class NormalizeBodyTest(unittest.TestCase):
         two_blocks = "```\nA\n```\n\nはい\n\n```\nB\n```"
         body, notices = normalize_body(two_blocks)
         self.assertEqual(body, two_blocks)
+        self.assertEqual(notices, [])
+
+    def test_leaves_text_following_closing_fence_marks_whole(self):
+        """ Keep text on a line that is not solely a closing fence. """
+        malformed = "```\n返信本文\n```この文字列は本文"
+        body, notices = normalize_body(malformed)
+        self.assertEqual(body, malformed)
         self.assertEqual(notices, [])
 
     def test_raises_no_notice_for_an_ordinary_reply(self):
