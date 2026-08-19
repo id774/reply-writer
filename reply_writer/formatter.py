@@ -40,6 +40,7 @@ import re
 from typing import List, Optional, Tuple
 
 FENCE = re.compile(r"^\s*```")
+CLOSING_FENCE = re.compile(r"^\s*```\s*$")
 
 
 def _normalize_newlines(text: str) -> str:
@@ -60,7 +61,7 @@ def _strip_outer_fence(text: str) -> Tuple[str, bool]:
     lines = text.strip().split("\n")
     if len(lines) < 2:
         return text.strip(), False
-    if not FENCE.match(lines[0]) or not FENCE.match(lines[-1]):
+    if not FENCE.match(lines[0]) or not CLOSING_FENCE.match(lines[-1]):
         return text.strip(), False
     if any(FENCE.match(line) for line in lines[1:-1]):
         return text.strip(), False
