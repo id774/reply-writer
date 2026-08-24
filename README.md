@@ -160,7 +160,8 @@ Neither mode falls back to the other. A configured mode that the endpoint does n
 GENERATION_TIMEOUT (120)  <  gunicorn --timeout (240)  <  Apache ProxyTimeout (300)
 ```
 
-Changing one means revisiting the other two.
+Changing `GENERATION_TIMEOUT` means revisiting the gunicorn and Apache
+timeouts.
 
 ## Usage
 
@@ -178,7 +179,8 @@ It listens on `http://127.0.0.1:8091/`. In production gunicorn serves it behind 
 | `POST /generate` | Generates one draft and shows it. |
 | `GET /healthz` | Says the process is up. It calls no API and returns no setting. |
 
-The input screen carries two fields and one button. The direction is marked optional and may be left empty, which is the ordinary case. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
+The input screen carries the message field, the optional direction field, and
+the generate button. The direction is marked optional and may be left empty, which is the ordinary case. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
 
 ### From the command line
 
