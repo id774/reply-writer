@@ -39,7 +39,7 @@
 #  - GENERATION_BACKEND
 #      Wire protocol of the endpoint. Required. 'openai-compatible' is
 #      the only value this version accepts; an unknown one is refused
-#      rather than read as the one backend that does exist.
+#      rather than coerced to a supported backend.
 #  - GENERATION_API_TOKEN
 #      API key or Bearer token of the endpoint. Required.
 #  - GENERATION_BASE_URL
