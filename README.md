@@ -92,7 +92,9 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Then edit `.env`. Four settings are required and have no defaults, so nothing runs until they are filled in.
+Then edit `.env`. The required settings are identified in the
+[Configuration](#configuration) table and have no defaults, so nothing runs
+until all required values are filled in.
 
 Check the installation:
 
@@ -125,9 +127,14 @@ Every setting is read from the environment, or from a `.env` file beside the app
 
 ### Choosing an endpoint
 
-The four required settings have no defaults on purpose. With one of them missing, the process refuses to start rather than picking a service for you, because a private message that leaves for an endpoint nobody named is worse than an application that will not run.
+`GENERATION_BACKEND`, `GENERATION_API_TOKEN`, `GENERATION_BASE_URL`, and
+`GENERATION_MODEL` are the required settings listed above. Their runtime
+validation is implemented in `config.py`; this README documents how an
+operator supplies them. With one of them missing, the process refuses to start rather than picking a service for you, because a private message that leaves for an endpoint nobody named is worse than an application that will not run.
 
-An unknown `GENERATION_BACKEND` is refused by name rather than read as the one backend that does exist. A base URL that is plain `http`, carries user information, a query or a fragment, or already ends in `/chat/completions` is refused as well: the SDK appends the resource path itself.
+An unknown `GENERATION_BACKEND` is refused rather than coerced to a supported
+value. Accepted backend values are defined in `config.py` and documented in
+the Configuration table. A base URL that is plain `http`, carries user information, a query or a fragment, or already ends in `/chat/completions` is refused as well: the SDK appends the resource path itself.
 
 ### One action, one request
 
@@ -220,7 +227,7 @@ python -m unittest discover -s tests
 
 No test makes a request, needs a token or reads a `.env`. The provider is replaced by a stub and the `openai` package is stood in for, so the suite runs with neither the dependency nor a network.
 
-Two of the cases guard invariants rather than features: that the API token appears in no response and no rendered page, and that no text a person entered or the model generated reaches the log. They are not deleted to make a refactor pass.
+The suite guards invariants as well as features, including: that the API token appears in no response and no rendered page, and that no text a person entered or the model generated reaches the log. They are not deleted to make a refactor pass.
 
 All test data is invented. No real mail, message, conversation, personal name, company or matter appears in this repository.
 
