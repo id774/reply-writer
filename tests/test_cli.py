@@ -44,6 +44,9 @@
 #    - Print the notices apart from the reply.
 #    - Print the draft as JSON on request.
 #    - Override GENERATION_MODEL, PROMPT_DIR and GENERATION_TIMEOUT.
+#    - Trim surrounding whitespace from a nonblank --model / --prompt-dir.
+#    - Refuse a blank or whitespace-only --model as an unset setting.
+#    - Fall back a blank or whitespace-only --prompt-dir to the default.
 #    - Refuse a timeout that is not positive, before a request.
 #    - Refuse a timeout that is not finite, before a request.
 #    - Refuse a configuration that cannot address an endpoint, exiting 1.
@@ -297,6 +300,49 @@ class OverrideTest(CliTestCase):
         self.run_cli(["generate", "--message", self.message_file,
                       "--timeout", "30"])
         self.assertEqual(self.config_used().generation_timeout, 30.0)
+
+    def test_model_override_trims_surrounding_whitespace(self):
+        """ Use the trimmed value, exactly as GENERATION_MODEL is read. """
+        self.run_cli(["generate", "--message", self.message_file,
+                      "--model", "  another-model  "])
+        self.assertEqual(self.config_used().generation_model,
+                         "another-model")
+
+    def test_prompt_dir_override_trims_surrounding_whitespace(self):
+        """ Use the trimmed path, exactly as PROMPT_DIR is read. """
+        self.run_cli(["generate", "--message", self.message_file,
+                      "--prompt-dir", "  {0}  ".format(self.directory.name)])
+        self.assertEqual(self.config_used().prompt_dir, self.directory.name)
+
+    def test_blank_model_override_is_refused_as_unset(self):
+        """
+        Refuse a blank or whitespace-only --model, not stand in with it.
+
+        A valid GENERATION_MODEL is configured, but an explicit blank
+        override is not the same thing as leaving the option out: it
+        unsets the model, and the command is refused before a request
+        is spent, exactly as a missing GENERATION_MODEL would be.
+        """
+        for value in ("", "   "):
+            status = self.run_cli(["generate", "--message",
+                                   self.message_file, "--model", value])
+            self.assertEqual(status, 1)
+            self.assertIn("GENERATION_MODEL", self.logged)
+            self.generate.assert_not_called()
+
+    def test_blank_prompt_dir_override_falls_back_to_default(self):
+        """
+        Fall back a blank or whitespace-only --prompt-dir to 'prompts'.
+
+        The loaded PROMPT_DIR is a custom directory; the explicit blank
+        override still unsets it, exactly as an unset PROMPT_DIR would
+        fall back to the documented default.
+        """
+        for value in ("", "   "):
+            self.run_cli(["generate", "--message", self.message_file,
+                          "--prompt-dir", value],
+                         settings={"PROMPT_DIR": self.directory.name})
+            self.assertEqual(self.config_used().prompt_dir, "prompts")
 
     def test_an_absent_option_changes_nothing(self):
         """ Leave every setting as configured when no option is given. """

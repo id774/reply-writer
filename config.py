@@ -78,6 +78,8 @@
 #      Port of the development server and of gunicorn. Defaults to 8091.
 #
 #  Version History:
+#  v1.1 2026-09-06
+#       Normalized CLI overrides and centralized --timeout validation.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -137,11 +139,21 @@ class Config:
         return urlsplit(self.generation_base_url).hostname or ""
 
 
+def _normalize_text(raw: str, default: str) -> str:
+    """
+    Strip a text value and fall back to the default when it is blank.
+
+    Shared by _text() and the CLI overrides below, so a setting means
+    the same thing whether it is read from the environment or given
+    explicitly on the command line.
+    """
+    value = raw.strip()
+    return value if value else default
+
+
 def _text(name: str, default: str) -> str:
     """ Read a setting and fall back to the default when it is blank. """
-    value = os.environ.get(name, "")
-    value = value.strip()
-    return value if value else default
+    return _normalize_text(os.environ.get(name, ""), default)
 
 
 def _number(name: str, default: float) -> float:
@@ -180,6 +192,22 @@ def _whole(name: str, default: int, minimum: int) -> int:
     return int(value)
 
 
+def _validate_timeout(value: float, raw) -> float:
+    """
+    Refuse a GENERATION_TIMEOUT value that is not finite and positive.
+
+    This is the one rule GENERATION_TIMEOUT is held to, whether the
+    value was read from the environment by load_config() or given
+    explicitly through the --timeout override, so cli.py does not keep
+    a second copy of it.
+    """
+    if not math.isfinite(value) or value <= 0:
+        raise ConfigError(
+            "GENERATION_TIMEOUT is {0}; expected a positive number.".format(
+                raw))
+    return value
+
+
 def load_config() -> Config:
     """ Build a Config from the environment and an optional .env file. """
     if load_dotenv is not None:
@@ -197,11 +225,8 @@ def load_config() -> Config:
             "GENERATION_RESPONSE_MODE is '{0}'; expected one of: {1}.".format(
                 response_mode, ", ".join(RESPONSE_MODES)))
 
-    timeout = _number("GENERATION_TIMEOUT", 120.0)
-    if timeout <= 0:
-        raise ConfigError(
-            "GENERATION_TIMEOUT is {0}; expected a positive number.".format(
-                _text("GENERATION_TIMEOUT", "")))
+    timeout = _validate_timeout(_number("GENERATION_TIMEOUT", 120.0),
+                                _text("GENERATION_TIMEOUT", ""))
 
     port = _whole("PORT", 8091, 1)
     if port > 65535:
@@ -224,6 +249,40 @@ def load_config() -> Config:
         log_level=_text("LOG_LEVEL", "INFO").upper(),
         port=port,
     )
+
+
+def override_model(config: Config, raw_value: str) -> None:
+    """
+    Apply an explicit --model override, in place.
+
+    raw_value receives the blank-is-unset rule GENERATION_MODEL itself
+    follows, so a blank or whitespace-only override does not stand in
+    as a model name: it leaves generation_model unset, and
+    validate_generation_config() refuses it as a missing setting.
+    """
+    config.generation_model = _normalize_text(raw_value, "")
+
+
+def override_prompt_dir(config: Config, raw_value: str) -> None:
+    """
+    Apply an explicit --prompt-dir override, in place.
+
+    raw_value receives the same blank-is-unset rule PROMPT_DIR itself
+    follows, so a blank or whitespace-only override falls back to the
+    documented default instead of reaching prompt loading as a path
+    made only of whitespace.
+    """
+    config.prompt_dir = _normalize_text(raw_value, "prompts")
+
+
+def override_timeout(config: Config, raw_value: float) -> None:
+    """
+    Apply an explicit --timeout override, in place.
+
+    raw_value has already passed argparse's own float() conversion;
+    this holds it to the one rule GENERATION_TIMEOUT is validated by.
+    """
+    config.generation_timeout = _validate_timeout(raw_value, raw_value)
 
 
 def _validate_base_url(url: str) -> None:

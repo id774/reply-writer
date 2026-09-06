@@ -197,7 +197,7 @@ python cli.py --version
 
 The message and the direction are read from a file or from standard input, never from an argument, and there is no option for the API token or the base URL: a command line is readable by every user of the host.
 
-`--model`, `--prompt-dir` and `--timeout` each replace the setting they name, for one run.
+`--model`, `--prompt-dir` and `--timeout` each replace the setting they name, for one run. An option left out changes nothing; an explicit value is held to the same whitespace and unset rule the setting follows when it comes from the environment, rather than to a looser rule of its own. A blank or whitespace-only `--model` is unset, so a missing `GENERATION_MODEL` stays missing and the command is refused before any request is made. A blank or whitespace-only `--prompt-dir` is unset as well, so it falls back to the default `prompts` even where the environment names a different directory.
 
 | Exit code | Meaning |
 | ---: | --- |

@@ -49,6 +49,10 @@
 #    - Refuse a base URL that already holds the resource path.
 #    - Refuse a missing model.
 #    - Keep the token out of every refusal message.
+#    - Trim a nonblank --model / --prompt-dir override, as the setting is.
+#    - Treat a blank or whitespace-only --model override as unset.
+#    - Fall back a blank or whitespace-only --prompt-dir override to the default.
+#    - Accept a positive finite --timeout override, refuse anything else.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -63,7 +67,8 @@
 import unittest
 from unittest import mock
 
-from config import (Config, ConfigError, load_config,
+from config import (Config, ConfigError, load_config, override_model,
+                    override_prompt_dir, override_timeout,
                     validate_generation_config)
 
 TOKEN = "00000000-0000-0000-0000-000000000000:secret-value"
@@ -299,6 +304,59 @@ class ValidateGenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ConfigError) as refusal:
                 validate_generation_config(config)
             self.assertNotIn(TOKEN, str(refusal.exception))
+
+
+class OverrideTest(unittest.TestCase):
+    """
+    Cover the helpers cli.py calls for an explicit CLI override.
+
+    Each helper is held to the same normalization GENERATION_MODEL,
+    PROMPT_DIR and GENERATION_TIMEOUT are held to when they come from
+    the environment, so a setting means the same thing whichever path
+    it was given through.
+    """
+
+    def test_override_model_trims_a_nonblank_value(self):
+        """ Trim surrounding whitespace, exactly as GENERATION_MODEL is. """
+        config = usable_config(generation_model="configured-model")
+        override_model(config, "  another-model  ")
+        self.assertEqual(config.generation_model, "another-model")
+
+    def test_override_model_of_a_blank_value_is_unset(self):
+        """ Treat a blank or whitespace-only --model as unset. """
+        for value in ("", "   "):
+            config = usable_config(generation_model="configured-model")
+            override_model(config, value)
+            self.assertEqual(config.generation_model, "")
+            with self.assertRaises(ConfigError) as refusal:
+                validate_generation_config(config)
+            self.assertIn("GENERATION_MODEL", str(refusal.exception))
+
+    def test_override_prompt_dir_trims_a_nonblank_value(self):
+        """ Trim surrounding whitespace, exactly as PROMPT_DIR is. """
+        config = usable_config(prompt_dir="prompts")
+        override_prompt_dir(config, "  custom/path  ")
+        self.assertEqual(config.prompt_dir, "custom/path")
+
+    def test_override_prompt_dir_of_a_blank_value_falls_back_to_default(self):
+        """ Fall back to 'prompts', even where a custom value was loaded. """
+        for value in ("", "   "):
+            config = usable_config(prompt_dir="custom/path")
+            override_prompt_dir(config, value)
+            self.assertEqual(config.prompt_dir, "prompts")
+
+    def test_override_timeout_accepts_a_positive_finite_value(self):
+        """ Accept a valid override in place of GENERATION_TIMEOUT. """
+        config = usable_config()
+        override_timeout(config, 30.0)
+        self.assertEqual(config.generation_timeout, 30.0)
+
+    def test_override_timeout_refuses_a_value_that_is_not_positive(self):
+        """ Refuse a limit no request could ever run inside. """
+        for value in (0.0, -1.0, float("nan"), float("inf"), float("-inf")):
+            config = usable_config()
+            with self.assertRaises(ConfigError):
+                override_timeout(config, value)
 
 
 if __name__ == "__main__":
