@@ -3,13 +3,13 @@ reply-writer Repository Version History
 
 v1.0.2 (Release Date: TBD)
 --------------------------
-- Align CLI configuration overrides with config.py's normalization and validation, correcting the blank/whitespace
-  semantics of --model and --prompt-dir and moving --timeout's validity check out of cli.py and into config.py alone.
+- Align CLI overrides with config.py's normalization: fix --model/--prompt-dir
+  blank handling and move --timeout's validity check into config.py.
 
 v1.0.1 (2026-08-26)
 -------------------
-- Keep the copy buttons legible on a phone in dark appearance, declaring the
-  light color scheme and stating the button text color with its background.
+- Keep the copy buttons legible on a phone in dark appearance, declaring the light
+  color scheme and stating the button text color with its background.
 - Complete the versioning rules in doc/POLICY.md.
 - Preserve reply text that follows closing fence marks on the same line.
 
