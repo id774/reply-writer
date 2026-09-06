@@ -40,11 +40,14 @@
 #      same reason. Leaving it out is an ordinary case.
 #  - --model NAME / --prompt-dir DIR / --timeout SECONDS
 #      Override GENERATION_MODEL, PROMPT_DIR and GENERATION_TIMEOUT for
-#      this invocation. --timeout is held to the rule
-#      GENERATION_TIMEOUT follows, a finite number greater than zero.
-#      The API token and the base URL have no option on purpose: the
-#      token is a secret, and the endpoint is a decision of the
-#      deployment.
+#      this invocation, each held to the normalization and validation
+#      the setting follows when it comes from the environment: a blank
+#      or whitespace-only --model is unset, so a required GENERATION_MODEL
+#      that was missing stays missing; a blank or whitespace-only
+#      --prompt-dir is unset, so PROMPT_DIR falls back to its default;
+#      --timeout must be a finite number greater than zero. The API
+#      token and the base URL have no option on purpose: the token is a
+#      secret, and the endpoint is a decision of the deployment.
 #  - --json
 #      Print the draft as JSON instead of as text.
 #
@@ -64,6 +67,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.1 2026-09-06
+#       Applied config.py's override rules instead of ad-hoc CLI checks.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -73,11 +78,12 @@ import argparse
 import dataclasses
 import json
 import logging
-import math
 import sys
 from typing import Optional
 
-from config import ConfigError, load_config, validate_generation_config
+from config import (ConfigError, load_config, override_model,
+                    override_prompt_dir, override_timeout,
+                    validate_generation_config)
 from reply_writer import (ReplyDraft, __version__, configure_logging,
                           new_request_id)
 from reply_writer.errors import ReplyWriterError
@@ -166,23 +172,20 @@ def main() -> int:
 
     configure_logging(config.log_level)
 
-    if arguments.model:
-        config.generation_model = arguments.model
-    if arguments.prompt_dir:
-        config.prompt_dir = arguments.prompt_dir
-
-    # Repeat the check load_config() performs on GENERATION_TIMEOUT.
-    # The override lands after it has run, so a value refused there
-    # would otherwise reach the SDK through the option instead. 'nan'
-    # is held to the same rule explicitly: argparse reads it as a
-    # float, and every comparison against it is false, so the test for
-    # a positive number lets it through on its own.
-    if arguments.timeout is not None:
-        if not math.isfinite(arguments.timeout) or arguments.timeout <= 0:
-            logger.error("--timeout is %s; expected a positive number.",
-                         arguments.timeout)
-            return 1
-        config.generation_timeout = arguments.timeout
+    # An option left unset changes nothing; an explicit value, blank or
+    # not, is passed to config.py, which applies the same normalization
+    # and validation a setting is held to when it comes from the
+    # environment instead of from the command line.
+    try:
+        if arguments.model is not None:
+            override_model(config, arguments.model)
+        if arguments.prompt_dir is not None:
+            override_prompt_dir(config, arguments.prompt_dir)
+        if arguments.timeout is not None:
+            override_timeout(config, arguments.timeout)
+    except ConfigError as error:
+        logger.error("%s", error)
+        return 1
 
     # After the overrides, so that --model can stand in for a missing
     # GENERATION_MODEL, and before the message is read, so that a
