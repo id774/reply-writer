@@ -25,7 +25,7 @@ Both files are required. One that is missing, unreadable or empty stops the gene
 
 ## Placeholders
 
-`user.md` carries exactly two:
+The double-brace form `{{...}}` is reserved as placeholder syntax in a prompt source. `user.md` carries exactly two, each exactly once:
 
 | Placeholder | What is substituted |
 | --- | --- |
@@ -34,7 +34,9 @@ Both files are required. One that is missing, unreadable or empty stops the gene
 
 `system.md` carries none.
 
-Substitution is literal and happens in one pass. A brace or a percent sign written in a prompt therefore needs no escaping, and text substituted for one placeholder is never scanned for another — a message carrying the literal `{{direction}}` cannot decide where the other block lands.
+This is enforced at generation time, against the prompt source read from disk and before it is substituted — the same for the shipped prompts and for a set substituted in through `PROMPT_DIR`. A `user.md` that omits `{{message}}` or `{{direction}}`, that carries either one more than once, or that carries any other `{{...}}` form, is a malformed prompt set; so is a `system.md` carrying any `{{...}}` form at all. A malformed set is refused before a generation request is spent. An ordinary single brace, `{` or `}`, is unaffected and needs no escaping.
+
+Substitution is literal and happens in one pass, over the source text that already passed the check above. A brace or a percent sign written in a prompt therefore needs no escaping, and text substituted for one placeholder is never scanned for another — a message carrying the literal `{{direction}}` cannot decide where the other block lands, and a double-brace token that arrives inside the message or the direction is that data, not prompt syntax, and is not rescanned or held against the contract.
 
 An empty direction substitutes as empty. That is the ordinary case, not an error and not a special path, and `user.md` says in its own words what an empty block means. Nothing in Python supplies a stand-in sentence for it: that would be a decision about wording, made where nobody adjusting the prompts would find it.
 

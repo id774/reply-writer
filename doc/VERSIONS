@@ -5,6 +5,8 @@ v1.0.2 (Release Date: TBD)
 --------------------------
 - Align CLI overrides with config.py's normalization: fix --model/--prompt-dir
   blank handling and move --timeout's validity check into config.py.
+- Validate prompt sets before generation, so required placeholders are
+  present exactly once and forbidden or unknown placeholders are refused.
 
 v1.0.1 (2026-08-26)
 -------------------

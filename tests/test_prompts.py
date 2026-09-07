@@ -6,12 +6,19 @@
 #
 #  Description:
 #  This test suite covers the prompt layer: reading the files, refusing
-#  one that is missing or empty, and assembling the two messages handed
-#  to the API. The concerns it pins are the ones the requirements
-#  attach to a prompt rather than to a file operation: the message
-#  being replied to and the direction reach the model in separate
-#  blocks, an absent direction still yields a valid prompt, and text
-#  substituted for one placeholder is never read as another.
+#  one that is missing or empty, refusing one that breaks the
+#  placeholder contract, and assembling the two messages handed to the
+#  API. The concerns it pins are the ones the requirements attach to a
+#  prompt rather than to a file operation: the message being replied to
+#  and the direction reach the model in separate blocks, an absent
+#  direction still yields a valid prompt, and text substituted for one
+#  placeholder is never read as another.
+#
+#  The placeholder contract is checked against the source text alone:
+#  system.md carries no double-brace placeholder, and user.md carries
+#  {{message}} and {{direction}} exactly once each and no other form. A
+#  set that omits, duplicates or adds one is refused before it is
+#  substituted, and a request is never reached.
 #
 #  The prompts shipped in prompts/ are checked for structure only. What
 #  they say is the subject of doc/PROMPTS.md, and pinning their wording
@@ -34,13 +41,20 @@
 #    - Refuse a prompt file that is missing.
 #    - Refuse a prompt file that is empty or only whitespace.
 #    - Keep the file name out of what the user is shown.
+#    - Refuse a user prompt missing {{message}} or {{direction}}.
+#    - Refuse a user prompt carrying either one more than once.
+#    - Refuse a user prompt carrying an unknown placeholder.
+#    - Refuse a system prompt carrying any placeholder.
+#    - Keep the file name out of what the user is shown on a bad contract.
 #    - Put the writing policy first and the data after it.
 #    - Place the message and the direction in their own blocks.
 #    - Build a valid prompt when no direction was given.
 #    - Substitute a brace written in a prompt without escaping it.
 #    - Read no placeholder out of substituted text.
+#    - Read no source placeholder out of placeholder-like input data.
 #    - Ship a system prompt and a user prompt that are not empty.
-#    - Carry both placeholders in the shipped user prompt.
+#    - Carry both placeholders, each once, in the shipped user prompt.
+#    - Carry no placeholder in the shipped system prompt.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -160,9 +174,11 @@ class BuildReplyMessagesTest(unittest.TestCase):
 
     def test_a_brace_in_a_prompt_needs_no_escaping(self):
         """ Substitute literally, so a prompt may carry a brace. """
-        self.prompts.write("user.md", '{"subject": null} {{message}}')
+        self.prompts.write("user.md",
+                           '{"subject": null} {{message}} {{direction}}')
         content = self.build()[1]["content"]
-        self.assertEqual(content, '{"subject": null} ' + MESSAGE)
+        self.assertEqual(content,
+                         '{"subject": null} ' + MESSAGE + ' ' + DIRECTION)
 
     def test_substituted_text_is_not_scanned_again(self):
         """
@@ -177,6 +193,95 @@ class BuildReplyMessagesTest(unittest.TestCase):
                              direction="{{message}}")[1]["content"]
         self.assertEqual(content, "D:{{message}} M:{{direction}}")
 
+    def test_an_unknown_looking_token_in_input_is_not_source_syntax(self):
+        """
+        Read no source placeholder out of placeholder-like input data.
+
+        The contract is checked against the file on disk, not against
+        what ends up in the assembled prompt. An unknown double-brace
+        token that arrives as part of the message or the direction is
+        the correspondent's or the person's text, not a defect in the
+        prompt set.
+        """
+        content = self.build(message="{{unknown}}",
+                             direction="{{unknown}}")[1]["content"]
+        self.assertEqual(content, "D:{{unknown}} M:{{unknown}}")
+
+
+class UserPromptContractTest(unittest.TestCase):
+    """ Cover the placeholder contract enforced on user.md. """
+
+    def setUp(self):
+        self.prompts = PromptDirectory()
+        self.addCleanup(self.prompts.cleanup)
+
+    def refuse(self, user):
+        """ Write user.md with the given text and assert it is refused. """
+        self.prompts.write("user.md", user)
+        with self.assertLogs("reply_writer.prompts", "ERROR"):
+            with self.assertRaises(InternalError):
+                load_prompt("user.md", self.prompts.path)
+
+    def test_refuses_a_user_prompt_missing_the_message_placeholder(self):
+        """ Refuse a user prompt that never places the message. """
+        self.refuse("D:{{direction}}")
+
+    def test_refuses_a_user_prompt_missing_the_direction_placeholder(self):
+        """ Refuse a user prompt that never places the direction. """
+        self.refuse("M:{{message}}")
+
+    def test_refuses_a_user_prompt_with_a_duplicate_message(self):
+        """ Refuse a user prompt that places the message twice. """
+        self.refuse("M:{{message}} {{message}} D:{{direction}}")
+
+    def test_refuses_a_user_prompt_with_a_duplicate_direction(self):
+        """ Refuse a user prompt that places the direction twice. """
+        self.refuse("M:{{message}} D:{{direction}} {{direction}}")
+
+    def test_refuses_a_user_prompt_with_an_unknown_placeholder(self):
+        """ Refuse an unknown placeholder even where both required ones
+        are present exactly once. """
+        self.refuse("M:{{message}} D:{{direction}} X:{{unknown}}")
+
+    def test_keeps_the_path_out_of_the_user_message(self):
+        """ Keep an internal path off the screen on a bad contract too. """
+        self.prompts.write("user.md", "M:{{message}}")
+        with self.assertLogs("reply_writer.prompts", "ERROR") as recorded:
+            try:
+                load_prompt("user.md", self.prompts.path)
+            except ReplyWriterError as error:
+                self.assertNotIn(self.prompts.path, error.user_message)
+            else:
+                self.fail("a malformed user prompt was not refused")
+        self.assertIn(self.prompts.path, "\n".join(recorded.output))
+
+
+class SystemPromptContractTest(unittest.TestCase):
+    """ Cover the placeholder-free contract enforced on system.md. """
+
+    def setUp(self):
+        self.prompts = PromptDirectory()
+        self.addCleanup(self.prompts.cleanup)
+
+    def refuse(self, system):
+        """ Write system.md with the given text and assert it is refused. """
+        self.prompts.write("system.md", system)
+        with self.assertLogs("reply_writer.prompts", "ERROR"):
+            with self.assertRaises(InternalError):
+                load_prompt("system.md", self.prompts.path)
+
+    def test_refuses_a_system_prompt_with_the_message_placeholder(self):
+        """ Refuse a system prompt that carries {{message}}. """
+        self.refuse("POLICY {{message}}")
+
+    def test_refuses_a_system_prompt_with_the_direction_placeholder(self):
+        """ Refuse a system prompt that carries {{direction}}. """
+        self.refuse("POLICY {{direction}}")
+
+    def test_refuses_a_system_prompt_with_an_unknown_placeholder(self):
+        """ Refuse a system prompt that carries any other placeholder. """
+        self.refuse("POLICY {{unknown}}")
+
 
 class ShippedPromptsTest(unittest.TestCase):
     """ Cover the structure of the prompts the repository ships. """
@@ -186,11 +291,16 @@ class ShippedPromptsTest(unittest.TestCase):
         for name in ("system.md", "user.md"):
             self.assertTrue(load_prompt(name, SHIPPED_PROMPTS).strip())
 
-    def test_the_user_prompt_carries_both_placeholders(self):
-        """ Carry the message and the direction into the user prompt. """
+    def test_the_user_prompt_carries_both_placeholders_once_each(self):
+        """ Carry the message and the direction, each exactly once. """
         user = load_prompt("user.md", SHIPPED_PROMPTS)
-        self.assertIn("{{message}}", user)
-        self.assertIn("{{direction}}", user)
+        self.assertEqual(user.count("{{message}}"), 1)
+        self.assertEqual(user.count("{{direction}}"), 1)
+
+    def test_the_system_prompt_carries_no_placeholder(self):
+        """ Carry no double-brace placeholder in the system prompt. """
+        system = load_prompt("system.md", SHIPPED_PROMPTS)
+        self.assertNotIn("{{", system)
 
     def test_the_shipped_prompts_assemble(self):
         """ Leave no placeholder behind once the two are substituted. """

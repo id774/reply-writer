@@ -36,6 +36,7 @@
 #    - Refuse an empty message before a request is spent.
 #    - Refuse a message longer than MAX_INPUT_CHARS.
 #    - Refuse a direction longer than MAX_POLICY_CHARS.
+#    - Refuse a user prompt breaking the placeholder contract, unspent.
 #    - Accept a message with no direction.
 #    - Carry the direction through to the prompt layer.
 #    - Spend exactly one request for one generation.
@@ -79,8 +80,8 @@ from unittest import mock
 
 from config import Config
 from reply_writer.errors import (DirectionTooLongError, EmptyInputError,
-                                 InputTooLongError, InvalidResponseError,
-                                 UpstreamTimeoutError)
+                                 InputTooLongError, InternalError,
+                                 InvalidResponseError, UpstreamTimeoutError)
 from reply_writer.generator import generate_reply
 from reply_writer.providers import CompletionResult
 
@@ -178,6 +179,14 @@ class InputValidationTest(GeneratorTestCase):
             self.generate(direction="い" * 11, provider=provider,
                           max_policy_chars=10)
         self.assertIn("10", refusal.exception.user_message)
+        self.assertEqual(provider.calls, [])
+
+    def test_refuses_a_broken_user_prompt_before_a_request_is_spent(self):
+        """ Refuse a user prompt missing a required placeholder, unspent. """
+        self.write("user.md", "M:{{message}}")
+        provider = StubProvider("unused")
+        with self.assertRaises(InternalError):
+            self.generate(provider=provider)
         self.assertEqual(provider.calls, [])
 
 

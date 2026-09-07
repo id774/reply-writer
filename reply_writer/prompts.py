@@ -34,6 +34,9 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-07
+#       Refuse a prompt source that omits, duplicates or adds a
+#       double-brace placeholder, before it is substituted.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -54,9 +57,53 @@ USER_PROMPT = "user.md"
 # The placeholders the user prompt carries, matched in one pass.
 PLACEHOLDER = re.compile(r"\{\{(message|direction)\}\}")
 
+# Every double-brace token in a prompt source, reserved as placeholder
+# syntax. Matched against the source text alone, never against data
+# already substituted into it.
+ANY_PLACEHOLDER = re.compile(r"\{\{.*?\}\}")
+
+REQUIRED_USER_PLACEHOLDERS = ("{{message}}", "{{direction}}")
+
+
+def _validate_prompt_contract(name: str, path: str, text: str) -> None:
+    """
+    Refuse a prompt source that breaks the placeholder contract.
+
+    system.md carries no double-brace placeholder at all. user.md
+    carries {{message}} and {{direction}} exactly once each, and no
+    other double-brace form. The check runs against the source text
+    read from disk, before any substitution.
+    """
+    found = ANY_PLACEHOLDER.findall(text)
+
+    if name == SYSTEM_PROMPT:
+        if found:
+            logger.error("The prompt file %s carries a placeholder", path)
+            raise InternalError(
+                "prompt file carries a placeholder: {0}".format(path))
+        return
+
+    counts: Dict[str, int] = {}
+    for token in found:
+        counts[token] = counts.get(token, 0) + 1
+
+    for placeholder in REQUIRED_USER_PLACEHOLDERS:
+        if counts.pop(placeholder, 0) != 1:
+            logger.error(
+                "The prompt file %s does not carry %s exactly once",
+                path, placeholder)
+            raise InternalError(
+                "prompt file placeholder count invalid: {0}".format(path))
+
+    if counts:
+        logger.error("The prompt file %s carries an unknown placeholder",
+                     path)
+        raise InternalError(
+            "prompt file carries an unknown placeholder: {0}".format(path))
+
 
 def load_prompt(name: str, prompt_dir: str) -> str:
-    """ Read one prompt file and return its text. """
+    """ Read one prompt file, refuse a malformed one, and return its text. """
     path = os.path.join(prompt_dir, name)
     try:
         with open(path, encoding="utf-8") as handle:
@@ -71,6 +118,8 @@ def load_prompt(name: str, prompt_dir: str) -> str:
     if not text:
         logger.error("The prompt file %s is empty", path)
         raise InternalError("prompt file empty: {0}".format(path))
+
+    _validate_prompt_contract(name, path, text)
     return text
 
 
