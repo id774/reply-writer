@@ -302,11 +302,12 @@ What may be shown to the person and what is recorded in the log are separate.
 Reads the prompt files and assembles the messages the generation API is given. It does that and nothing else:
 
 - reading the prompt files
+- validating that a prompt source satisfies the placeholder contract fixed by [`PROMPTS.md`](PROMPTS.md), before it is substituted
 - placing the received message
 - placing the optional direction
 - building the messages for the API
 
-It performs no API call.
+A prompt source that fails the check is refused before the generation API is called. It performs no API call.
 
 ### 8.7 `reply_writer/generator.py`
 

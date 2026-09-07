@@ -211,6 +211,8 @@ How a reply reads is decided by the prompts under `prompts/`, not by the code. A
 
 The received message is untrusted data. It reaches the model inside a block marked as the text being replied to, and a sentence inside it that reads as an instruction to a model is answered as the correspondent's words rather than obeyed.
 
+Pointing `PROMPT_DIR` at a directory of your own still has to satisfy the placeholder contract [doc/PROMPTS.md](doc/PROMPTS.md) fixes: a malformed set is refused before a generation request is spent.
+
 [doc/PROMPTS.md](doc/PROMPTS.md) states what each file is for, what its output has to satisfy, and how a change to one is made.
 
 ## When something fails
