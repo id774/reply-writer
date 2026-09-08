@@ -8,7 +8,9 @@
 #  This test suite covers the command line. It pins the exit codes, the
 #  reading of the message and the direction from a file or from
 #  standard input, the overrides that name the setting they replace,
-#  and the refusals that happen before a request is spent.
+#  and the refusals that happen before a request is spent. Standard
+#  input can be assigned to only one of the message and the direction
+#  in a single invocation; asking for both is refused.
 #
 #  Two of the cases are about the shape of the interface rather than
 #  its behaviour: --help and --version exit 0 without any setting, and
@@ -39,6 +41,11 @@
 #    - Read the message from standard input.
 #    - Generate without a direction, which is an ordinary case.
 #    - Read the direction from a file where one is given.
+#    - Read the direction from standard input.
+#    - Read the message from standard input while the direction comes
+#      from a file.
+#    - Refuse standard input assigned to both message and direction,
+#      exiting 2.
 #    - Use the same generation core as the web application.
 #    - Print a subject only where the reply carries one.
 #    - Print the notices apart from the reply.
@@ -209,6 +216,36 @@ class InterfaceTest(CliTestCase):
         for option in ("--token", "--api-token", "--base-url", "--port"):
             self.assertNotIn(option, usage)
 
+    def test_refuses_standard_input_for_both_message_and_direction(self):
+        """
+        Refuse '-' for both --message and --direction, before anything runs.
+
+        One standard input stream cannot be split between the message
+        and the direction: the first read would consume it all and the
+        second would see only an empty string. argparse refuses the
+        combination up front, so nothing is loaded or read.
+        """
+        err = io.StringIO()
+        with mock.patch("sys.argv",
+                        ["cli.py", "generate", "--message", "-",
+                         "--direction", "-"]), \
+                mock.patch("sys.stdin", io.StringIO()), \
+                mock.patch("sys.stderr", err), \
+                mock.patch("cli.load_config") as load_config, \
+                mock.patch("cli.read_text") as read_text, \
+                mock.patch("cli.generate_reply") as generate_reply:
+            with self.assertRaises(SystemExit) as exit_status:
+                cli.main()
+
+        self.assertEqual(exit_status.exception.code, 2)
+        self.assertIn("usage:", err.getvalue())
+        self.assertIn(
+            "--message and --direction cannot both read from standard input",
+            err.getvalue())
+        load_config.assert_not_called()
+        read_text.assert_not_called()
+        generate_reply.assert_not_called()
+
 
 class GenerationTest(CliTestCase):
     """ Cover one generation from the command line. """
@@ -237,6 +274,23 @@ class GenerationTest(CliTestCase):
         path = self.write("direction.txt", DIRECTION)
         self.run_cli(["generate", "--message", self.message_file,
                       "--direction", path])
+        self.assertEqual(self.generate.call_args[0][1], DIRECTION)
+
+    def test_reads_the_direction_from_standard_input(self):
+        """ Read the direction from standard input when asked with '-'. """
+        status = self.run_cli(["generate", "--message", self.message_file,
+                               "--direction", "-"], stdin=DIRECTION)
+        self.assertEqual(status, 0)
+        self.assertEqual(self.generate.call_args[0][0], MESSAGE)
+        self.assertEqual(self.generate.call_args[0][1], DIRECTION)
+
+    def test_reads_the_message_from_standard_input_with_a_direction_file(self):
+        """ Read the message from standard input, the direction from a file. """
+        path = self.write("direction.txt", DIRECTION)
+        status = self.run_cli(["generate", "--message", "-",
+                               "--direction", path], stdin=MESSAGE)
+        self.assertEqual(status, 0)
+        self.assertEqual(self.generate.call_args[0][0], MESSAGE)
         self.assertEqual(self.generate.call_args[0][1], DIRECTION)
 
     def test_uses_the_same_generation_core_as_the_web_application(self):

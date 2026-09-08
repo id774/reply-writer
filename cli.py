@@ -22,6 +22,7 @@
 #  Usage:
 #      python cli.py generate --message message.txt
 #      python cli.py generate --message - --direction direction.txt
+#      python cli.py generate --message message.txt --direction -
 #      python cli.py generate --message message.txt [--model NAME] [--json]
 #      python cli.py -h | --help
 #      python cli.py -v | --version
@@ -34,10 +35,12 @@
 #      Required. The message is read from a file rather than from an
 #      argument because a command line is readable by every user of the
 #      host through ps, and private correspondence has no business
-#      there.
+#      there. '-' cannot be given to both --message and --direction at
+#      once: there is one standard input stream to read.
 #  - --direction FILE
 #      File holding the direction for this reply. Optional, for the
-#      same reason. Leaving it out is an ordinary case.
+#      same reason. Leaving it out is an ordinary case. '-' reads
+#      standard input, but not together with --message -.
 #  - --model NAME / --prompt-dir DIR / --timeout SECONDS
 #      Override GENERATION_MODEL, PROMPT_DIR and GENERATION_TIMEOUT for
 #      this invocation, each held to the normalization and validation
@@ -59,14 +62,17 @@
 #       could not be read or was empty, or the endpoint did not return
 #       a usable draft.
 #  - 2: The command line was rejected by argparse, for example an
-#       unknown option, a missing subcommand, or --timeout given
-#       something that is not a number.
+#       unknown option, a missing subcommand, --timeout given something
+#       that is not a number, or --message and --direction both given
+#       '-'.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - openai
 #
 #  Version History:
+#  v1.2 2026-09-08
+#       Refused simultaneous standard-input sources for message and direction.
 #  v1.1 2026-09-06
 #       Applied config.py's override rules instead of ad-hoc CLI checks.
 #  v1.0 2026-08-10
@@ -102,10 +108,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     generate = commands.add_parser(
         "generate", help="Generate a draft reply to a received message.")
-    generate.add_argument("--message", required=True,
-                          help="File holding the received message, or '-'.")
-    generate.add_argument("--direction",
-                          help="File holding the direction for this reply.")
+    generate.add_argument(
+        "--message",
+        required=True,
+        help=("File holding the received message, or '-'. "
+              "Standard input may be used for only one input."),
+    )
+    generate.add_argument(
+        "--direction",
+        help=("File holding the direction for this reply, or '-'. "
+              "Standard input may be used for only one input."),
+    )
     generate.add_argument("--model", help="Override GENERATION_MODEL.")
     generate.add_argument("--prompt-dir", help="Override PROMPT_DIR.")
     generate.add_argument("--timeout", type=float,
@@ -157,7 +170,12 @@ def report(draft: ReplyDraft, as_json: bool) -> None:
 
 def main() -> int:
     """ Run one command and return its exit status. """
-    arguments = build_parser().parse_args()
+    parser = build_parser()
+    arguments = parser.parse_args()
+
+    if arguments.message == "-" and arguments.direction == "-":
+        parser.error(
+            "--message and --direction cannot both read from standard input")
 
     # Configured before the settings are read, so that a refused
     # setting is reported in the same format as everything else. The
