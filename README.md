@@ -190,12 +190,13 @@ The command line calls the same generation core, the same prompts and the same p
 python cli.py generate --message message.txt
 python cli.py generate --message message.txt --direction direction.txt
 pbpaste | python cli.py generate --message -
+cat direction.txt | python cli.py generate --message message.txt --direction -
 python cli.py generate --message message.txt --json
 python cli.py --help
 python cli.py --version
 ```
 
-The message and the direction are read from a file or from standard input, never from an argument, and there is no option for the API token or the base URL: a command line is readable by every user of the host.
+The message and the direction are read from a file or from standard input, never from an argument. `-` may select standard input for either one, but not for both in the same invocation: the CLI has one input stream and no framing that could split it into two values. There is no option for the API token or the base URL, because a command line is readable by every user of the host.
 
 `--model`, `--prompt-dir` and `--timeout` each replace the setting they name, for one run. An option left out changes nothing; an explicit value is held to the same whitespace and unset rule the setting follows when it comes from the environment, rather than to a looser rule of its own. A blank or whitespace-only `--model` is unset, so a missing `GENERATION_MODEL` stays missing and the command is refused before any request is made. A blank or whitespace-only `--prompt-dir` is unset as well, so it falls back to the default `prompts` even where the environment names a different directory.
 

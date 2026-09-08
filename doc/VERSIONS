@@ -7,6 +7,7 @@ v1.0.2 (Release Date: TBD)
   blank handling and move --timeout's validity check into config.py.
 - Validate prompt sets before generation, so required placeholders are
   present exactly once and forbidden or unknown placeholders are refused.
+- Reject using standard input for both CLI message and direction.
 
 v1.0.1 (2026-08-26)
 -------------------
