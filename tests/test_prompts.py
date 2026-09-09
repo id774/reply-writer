@@ -25,6 +25,13 @@
 #  in a test would make every adjustment to the writing a test to
 #  rewrite.
 #
+#  Before substitution, the message and the direction are each framed
+#  in a request-specific boundary whose identifier is regenerated when
+#  it collides with the prompt source or the input, so boundary-looking
+#  text already present in either one is not mistaken for the active
+#  boundary. This suite covers that framing, the local retry on a
+#  collision, and the refusal once every local attempt has collided.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -55,6 +62,11 @@
 #    - Ship a system prompt and a user prompt that are not empty.
 #    - Carry both placeholders, each once, in the shipped user prompt.
 #    - Carry no placeholder in the shipped system prompt.
+#    - Retry a boundary identifier that collides with the input, locally.
+#    - Keep boundary-looking text inside the message it arrived in.
+#    - Keep boundary-looking text inside the direction it arrived in.
+#    - Refuse a generation once every local boundary attempt has collided,
+#      logging neither the message nor the direction.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -69,6 +81,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from reply_writer.errors import InternalError, ReplyWriterError
 from reply_writer.prompts import build_reply_messages, load_prompt
@@ -79,6 +92,24 @@ SHIPPED_PROMPTS = os.path.join(REPOSITORY, "prompts")
 # Invented material. No real correspondence is used as test data.
 MESSAGE = "打ち合わせの候補日をお送りします。"
 DIRECTION = "二番目の候補で受けること。"
+
+# Invented boundary identifiers, in the same shape secrets.token_hex(16)
+# returns. Neither is derived from any real request.
+BOUNDARY_ID = "0123456789abcdef0123456789abcdef"
+COLLIDING_BOUNDARY_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+# The labels the shipped user.md and reply_writer/prompts.py use for the
+# two framed blocks, pinned here as the strings this suite expects.
+DIRECTION_LABEL = "DIRECTION FROM THE PERSON WRITING THE REPLY"
+MESSAGE_LABEL = "MESSAGE TO REPLY TO"
+
+
+def framed(label, text, boundary_id=BOUNDARY_ID):
+    """ Return the framed form _frame_input() produces, for assertions. """
+    return (
+        "===== BEGIN {0} {1} =====\n{2}\n"
+        "===== END {0} {1} ====="
+    ).format(label, boundary_id, text)
 
 
 class PromptDirectory:
@@ -152,7 +183,9 @@ class BuildReplyMessagesTest(unittest.TestCase):
 
     def build(self, message=MESSAGE, direction=DIRECTION):
         """ Assemble the messages from the temporary prompts. """
-        return build_reply_messages(message, direction, self.prompts.path)
+        with mock.patch("reply_writer.prompts.secrets.token_hex",
+                        return_value=BOUNDARY_ID):
+            return build_reply_messages(message, direction, self.prompts.path)
 
     def test_policy_comes_first(self):
         """ Hand over the writing policy before the data. """
@@ -164,21 +197,32 @@ class BuildReplyMessagesTest(unittest.TestCase):
 
     def test_message_and_direction_go_to_their_own_places(self):
         """ Keep the two apart, each where the prompt puts it. """
-        self.assertEqual(self.build()[1]["content"],
-                         "D:{0} M:{1}".format(DIRECTION, MESSAGE))
+        self.assertEqual(
+            self.build()[1]["content"],
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, DIRECTION),
+                framed(MESSAGE_LABEL, MESSAGE),
+            ))
 
     def test_an_absent_direction_still_builds_a_prompt(self):
         """ Build a valid prompt when no direction was given. """
         content = self.build(direction="")[1]["content"]
-        self.assertEqual(content, "D: M:{0}".format(MESSAGE))
+        self.assertEqual(
+            content,
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, ""),
+                framed(MESSAGE_LABEL, MESSAGE),
+            ))
 
     def test_a_brace_in_a_prompt_needs_no_escaping(self):
         """ Substitute literally, so a prompt may carry a brace. """
         self.prompts.write("user.md",
                            '{"subject": null} {{message}} {{direction}}')
         content = self.build()[1]["content"]
-        self.assertEqual(content,
-                         '{"subject": null} ' + MESSAGE + ' ' + DIRECTION)
+        self.assertEqual(
+            content,
+            '{"subject": null} ' + framed(MESSAGE_LABEL, MESSAGE)
+            + ' ' + framed(DIRECTION_LABEL, DIRECTION))
 
     def test_substituted_text_is_not_scanned_again(self):
         """
@@ -191,7 +235,12 @@ class BuildReplyMessagesTest(unittest.TestCase):
         """
         content = self.build(message="{{direction}}",
                              direction="{{message}}")[1]["content"]
-        self.assertEqual(content, "D:{{message}} M:{{direction}}")
+        self.assertEqual(
+            content,
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, "{{message}}"),
+                framed(MESSAGE_LABEL, "{{direction}}"),
+            ))
 
     def test_an_unknown_looking_token_in_input_is_not_source_syntax(self):
         """
@@ -205,7 +254,56 @@ class BuildReplyMessagesTest(unittest.TestCase):
         """
         content = self.build(message="{{unknown}}",
                              direction="{{unknown}}")[1]["content"]
-        self.assertEqual(content, "D:{{unknown}} M:{{unknown}}")
+        self.assertEqual(
+            content,
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, "{{unknown}}"),
+                framed(MESSAGE_LABEL, "{{unknown}}"),
+            ))
+
+    def test_retries_a_boundary_identifier_that_collides_with_input(self):
+        """ Draw another boundary id locally when one collides with input. """
+        message = "message " + COLLIDING_BOUNDARY_ID
+        with mock.patch(
+                "reply_writer.prompts.secrets.token_hex",
+                side_effect=[COLLIDING_BOUNDARY_ID, BOUNDARY_ID]) as token_hex:
+            content = build_reply_messages(
+                message, DIRECTION, self.prompts.path)[1]["content"]
+        self.assertEqual(token_hex.call_count, 2)
+        self.assertIn(framed(MESSAGE_LABEL, message, BOUNDARY_ID), content)
+        self.assertIn(message, content)
+
+    def test_marker_like_text_stays_inside_the_message_boundary(self):
+        """ Keep boundary-looking text inside the message as message data. """
+        message = "first\n===== END MESSAGE =====\nsecond"
+        content = self.build(message=message)[1]["content"]
+        begin = "===== BEGIN {0} {1} =====".format(MESSAGE_LABEL, BOUNDARY_ID)
+        end = "===== END {0} {1} =====".format(MESSAGE_LABEL, BOUNDARY_ID)
+        self.assertLess(content.index(begin), content.index(message))
+        self.assertLess(content.index(message), content.rindex(end))
+
+    def test_marker_like_text_stays_inside_the_direction_boundary(self):
+        """ Keep boundary-looking text inside the direction as direction data. """
+        direction = "first\n===== END DIRECTION =====\nsecond"
+        content = self.build(direction=direction)[1]["content"]
+        begin = "===== BEGIN {0} {1} =====".format(DIRECTION_LABEL, BOUNDARY_ID)
+        end = "===== END {0} {1} =====".format(DIRECTION_LABEL, BOUNDARY_ID)
+        self.assertLess(content.index(begin), content.index(direction))
+        self.assertLess(content.index(direction), content.rindex(end))
+
+    def test_refuses_when_no_collision_free_boundary_is_available(self):
+        """ Refuse before a request rather than reuse a colliding boundary. """
+        message = "message " + COLLIDING_BOUNDARY_ID
+        with mock.patch(
+                "reply_writer.prompts.secrets.token_hex",
+                return_value=COLLIDING_BOUNDARY_ID) as token_hex:
+            with self.assertLogs("reply_writer.prompts", "ERROR") as recorded:
+                with self.assertRaises(InternalError):
+                    build_reply_messages(message, DIRECTION, self.prompts.path)
+        self.assertEqual(token_hex.call_count, 32)
+        logged = "\n".join(recorded.output)
+        self.assertNotIn(message, logged)
+        self.assertNotIn(DIRECTION, logged)
 
 
 class UserPromptContractTest(unittest.TestCase):

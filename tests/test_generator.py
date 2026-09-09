@@ -40,6 +40,7 @@
 #    - Accept a message with no direction.
 #    - Carry the direction through to the prompt layer.
 #    - Spend exactly one request for one generation.
+#    - Spend exactly one request when a local boundary retry is needed.
 #    - Carry the request id down to the provider.
 #    - Read a reply that carries a subject.
 #    - Read a reply that carries none, from null and from an absent field.
@@ -90,6 +91,22 @@ MESSAGE = "打ち合わせの候補日をお送りします。ご都合はいか
 DIRECTION = "二番目の候補で受けること。"
 REPLY = "ご連絡ありがとうございます。\n\n二番目の候補でお願いいたします。"
 SUBJECT = "Re: 打ち合わせの候補日"
+
+# An invented boundary identifier, in the same shape secrets.token_hex(16)
+# returns. It is not derived from any real request.
+BOUNDARY_ID = "0123456789abcdef0123456789abcdef"
+COLLIDING_BOUNDARY_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+DIRECTION_LABEL = "DIRECTION FROM THE PERSON WRITING THE REPLY"
+MESSAGE_LABEL = "MESSAGE TO REPLY TO"
+
+
+def framed(label, text, boundary_id=BOUNDARY_ID):
+    """ Return the framed form the prompt layer wraps input in. """
+    return (
+        "===== BEGIN {0} {1} =====\n{2}\n"
+        "===== END {0} {1} ====="
+    ).format(label, boundary_id, text)
 
 
 class StubProvider:
@@ -195,16 +212,28 @@ class GenerationTest(GeneratorTestCase):
 
     def test_generates_without_a_direction(self):
         """ Generate a draft when no direction was given. """
-        draft = self.generate(direction="")
+        with mock.patch("reply_writer.prompts.secrets.token_hex",
+                        return_value=BOUNDARY_ID):
+            draft = self.generate(direction="")
         self.assertEqual(draft.body, REPLY)
-        self.assertEqual(self.provider.calls[0]["messages"][1]["content"],
-                         "D: M:{0}".format(MESSAGE))
+        self.assertEqual(
+            self.provider.calls[0]["messages"][1]["content"],
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, ""),
+                framed(MESSAGE_LABEL, MESSAGE),
+            ))
 
     def test_carries_the_direction_to_the_prompt(self):
         """ Hand the direction to the prompt layer where there is one. """
-        self.generate(direction=DIRECTION)
-        self.assertEqual(self.provider.calls[0]["messages"][1]["content"],
-                         "D:{0} M:{1}".format(DIRECTION, MESSAGE))
+        with mock.patch("reply_writer.prompts.secrets.token_hex",
+                        return_value=BOUNDARY_ID):
+            self.generate(direction=DIRECTION)
+        self.assertEqual(
+            self.provider.calls[0]["messages"][1]["content"],
+            "D:{0} M:{1}".format(
+                framed(DIRECTION_LABEL, DIRECTION),
+                framed(MESSAGE_LABEL, MESSAGE),
+            ))
 
     def test_spends_one_request(self):
         """ Spend exactly one request for one generation. """
@@ -246,6 +275,24 @@ class GenerationTest(GeneratorTestCase):
     def test_generated_at_is_recorded(self):
         """ Stamp the draft with the time it was generated. """
         self.assertTrue(self.generate().generated_at)
+
+    def test_boundary_collision_still_spends_one_provider_request(self):
+        """
+        Retry a colliding boundary locally, without a second request.
+
+        A boundary identifier that collides with the input is
+        discarded and replaced locally, before the provider is ever
+        called. That local retry must not turn into a second provider
+        request: one generation still spends exactly one.
+        """
+        message = "message " + COLLIDING_BOUNDARY_ID
+        with mock.patch(
+                "reply_writer.prompts.secrets.token_hex",
+                side_effect=[COLLIDING_BOUNDARY_ID, BOUNDARY_ID]) as token_hex:
+            draft = self.generate(message=message, direction=DIRECTION)
+        self.assertEqual(draft.body, REPLY)
+        self.assertEqual(token_hex.call_count, 2)
+        self.assertEqual(len(self.provider.calls), 1)
 
 
 class InvalidAnswerTest(GeneratorTestCase):

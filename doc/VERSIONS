@@ -8,6 +8,10 @@ v1.0.2 (Release Date: TBD)
 - Validate prompt sets before generation, so required placeholders are
   present exactly once and forbidden or unknown placeholders are refused.
 - Reject using standard input for both CLI message and direction.
+- Frame prompt inputs with collision-free request boundaries, keeping received
+  messages data and directions limited to reply-writing instructions.
+- Reject malformed endpoint hosts and ports before generation, and align
+  configuration, test isolation and deployment documentation.
 
 v1.0.1 (2026-08-26)
 -------------------

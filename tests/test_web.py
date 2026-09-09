@@ -22,9 +22,11 @@
 #  model generated reaches the log. They are not deleted to make a
 #  refactor pass.
 #
-#  No request is made. generate_reply is replaced by a stub, and the
-#  settings app.py validates while it is imported are set with
-#  setdefault so that a real .env is left alone.
+#  No request is made. generate_reply is replaced by a stub. app.py
+#  validates its settings while it is imported, so that import happens
+#  with os.environ replaced outright by a controlled test environment
+#  and config.load_dotenv disabled, so a real .env on the host cannot
+#  supply a value this suite would otherwise read.
 #
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
@@ -60,6 +62,8 @@
 #    - Write no message, direction or reply to the log.
 #    - Request generation with POST, so nothing entered reaches a URL.
 #    - Load no script and no style from another host.
+#    - Load every optional setting at its documented default, so the
+#      isolated test environment carries none of them from a real .env.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -77,16 +81,24 @@ import re
 import unittest
 from unittest import mock
 
-# app.py validates the generation settings while it is imported, so a
-# worker that cannot address an endpoint refuses to start. These values
-# are what that check needs and nothing more: no request is ever made,
-# and setdefault leaves a real .env alone when one is present.
-os.environ.setdefault("GENERATION_BACKEND", "openai-compatible")
-os.environ.setdefault("GENERATION_API_TOKEN", "test-token-value")
-os.environ.setdefault("GENERATION_BASE_URL", "https://api.example.test/v1")
-os.environ.setdefault("GENERATION_MODEL", "test-model")
+import config as config_module
 
-import app as web  # noqa: E402  imported after the settings above
+# app.py validates the generation settings while it is imported, so a
+# worker that cannot address an endpoint refuses to start. These are
+# the settings that check needs and nothing more: no request is ever
+# made. The import happens with the environment replaced outright and
+# .env loading disabled, so a real .env on the host cannot decide what
+# this suite sees.
+WEB_TEST_ENVIRONMENT = {
+    "GENERATION_BACKEND": "openai-compatible",
+    "GENERATION_API_TOKEN": "test-token-value",
+    "GENERATION_BASE_URL": "https://api.example.test/v1",
+    "GENERATION_MODEL": "test-model",
+}
+
+with mock.patch.dict("os.environ", WEB_TEST_ENVIRONMENT, clear=True), \
+        mock.patch.object(config_module, "load_dotenv", None):
+    import app as web  # noqa: E402  imported after the settings above
 from reply_writer import ReplyDraft  # noqa: E402
 from reply_writer.errors import (EmptyInputError,  # noqa: E402
                                  InputTooLongError, InternalError,
@@ -174,6 +186,26 @@ class RouteTest(WebTestCase):
     def test_generation_is_a_post(self):
         """ Keep what was entered out of a URL, a log and a history. """
         self.assertEqual(self.client.get("/generate").status_code, 405)
+
+    def test_web_test_config_uses_documented_defaults(self):
+        """
+        Load every optional setting at its documented default.
+
+        This pins that the isolated test environment app.py was
+        imported under carries none of the optional settings, so a
+        real .env on the host could not have supplied one of them
+        either.
+        """
+        self.assertEqual(web.config.generation_response_mode, "prompt-json")
+        self.assertEqual(web.config.generation_timeout, 120.0)
+        self.assertEqual(web.config.generation_max_retries, 0)
+        self.assertIsNone(web.config.generation_temperature)
+        self.assertEqual(web.config.max_output_tokens, 2000)
+        self.assertEqual(web.config.max_input_chars, 8000)
+        self.assertEqual(web.config.max_policy_chars, 2000)
+        self.assertEqual(web.config.prompt_dir, "prompts")
+        self.assertEqual(web.config.log_level, "INFO")
+        self.assertEqual(web.config.port, 8091)
 
 
 class ResultScreenTest(WebTestCase):

@@ -24,6 +24,12 @@
 #  stand-in sentence here would move a decision about wording out of
 #  the prompts and into Python.
 #
+#  Before substitution, the message and the direction are each framed
+#  in a request-specific boundary: a BEGIN/END pair carrying a random
+#  identifier that is regenerated until it occurs in neither the
+#  prompt source nor the input. Boundary-looking text already present
+#  in the input therefore cannot be mistaken for the active boundary.
+#
 #  Author: id774 (More info: http://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
@@ -34,6 +40,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.2 2026-09-09
+#       Framed prompt inputs with collision-free request boundaries.
 #  v1.1 2026-09-07
 #       Refuse a prompt source that omits, duplicates or adds a
 #       double-brace placeholder, before it is substituted.
@@ -45,6 +53,7 @@
 import logging
 import os
 import re
+import secrets
 from typing import Dict, List
 
 from reply_writer.errors import InternalError
@@ -63,6 +72,14 @@ PLACEHOLDER = re.compile(r"\{\{(message|direction)\}\}")
 ANY_PLACEHOLDER = re.compile(r"\{\{.*?\}\}")
 
 REQUIRED_USER_PLACEHOLDERS = ("{{message}}", "{{direction}}")
+
+# How many locally generated boundary identifiers are tried before a
+# generation is refused. Every attempt is a local comparison with no
+# external side effect; none of them spends a request.
+BOUNDARY_ATTEMPTS = 32
+
+DIRECTION_LABEL = "DIRECTION FROM THE PERSON WRITING THE REPLY"
+MESSAGE_LABEL = "MESSAGE TO REPLY TO"
 
 
 def _validate_prompt_contract(name: str, path: str, text: str) -> None:
@@ -100,6 +117,33 @@ def _validate_prompt_contract(name: str, path: str, text: str) -> None:
                      path)
         raise InternalError(
             "prompt file carries an unknown placeholder: {0}".format(path))
+
+
+def _new_boundary_id(*texts: str) -> str:
+    """
+    Return a boundary identifier that occurs in none of the given texts.
+
+    Each candidate is generated locally and compared against the
+    prompt source and the input; none of this spends a request. A
+    candidate that collides with any of the texts is discarded and
+    another is drawn, up to BOUNDARY_ATTEMPTS times.
+    """
+    for _ in range(BOUNDARY_ATTEMPTS):
+        candidate = secrets.token_hex(16)
+        if all(candidate not in text for text in texts):
+            return candidate
+
+    logger.error(
+        "Could not create a prompt boundary without an input collision")
+    raise InternalError("prompt boundary collision")
+
+
+def _frame_input(label: str, text: str, boundary_id: str) -> str:
+    """ Wrap text in a BEGIN/END pair carrying the given boundary id. """
+    return (
+        "===== BEGIN {0} {1} =====\n{2}\n"
+        "===== END {0} {1} ====="
+    ).format(label, boundary_id, text)
 
 
 def load_prompt(name: str, prompt_dir: str) -> str:
@@ -141,12 +185,17 @@ def build_reply_messages(message: str, direction: str,
     system = load_prompt(SYSTEM_PROMPT, prompt_dir)
     user = load_prompt(USER_PROMPT, prompt_dir)
 
+    boundary_id = _new_boundary_id(system, user, message, direction)
+
     # One pass over the template, so that text substituted for one
     # placeholder is never scanned for another. Chained replaces would
     # let a message carrying the literal '{{direction}}' decide where
     # the other block lands. The replacement is the value itself: the
     # callable form of re.sub() expands no backreference in it.
-    values = {"message": message, "direction": direction}
+    values = {
+        "message": _frame_input(MESSAGE_LABEL, message, boundary_id),
+        "direction": _frame_input(DIRECTION_LABEL, direction, boundary_id),
+    }
     user = PLACEHOLDER.sub(lambda found: values[found.group(1)], user)
 
     return [
