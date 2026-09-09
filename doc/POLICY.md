@@ -128,6 +128,10 @@ The settings decide where a private message is sent, so they are read strictly.
   provider may use the resource path defined by its wire protocol; for the
   OpenAI-compatible provider, the SDK appends `/chat/completions` to
   `GENERATION_BASE_URL`.
+- Refuse a malformed base URL before a request is made. An HTTPS URL still has
+  to carry a valid host and, where present, a TCP port in the valid range.
+  Parser failures, missing hosts and invalid ports are configuration errors;
+  they are not deferred to the SDK.
 - Do not infer what a compatible endpoint supports from its model name or its
   URL. A difference in behavior, such as whether a structured answer can be
   requested of the API itself, is expressed as a named setting, and a mode that
@@ -195,9 +199,11 @@ the configured generation API
   instructions given by the system and by the person, and says which is which.
 - An empty direction still yields a valid prompt. The absence of a direction is
   a normal case, not an error and not a special path.
-- Substitution into a prompt is textual and literal. A prompt is not treated as
-  a format string, so a brace or a percent sign written in it needs no
-  escaping.
+- Placeholder substitution remains one pass over the checked prompt source.
+  Before substitution, the prompt layer wraps the message and direction in
+  request-specific boundary lines whose identifier occurs in neither prompt
+  source nor input. The input text inside those boundaries is left unchanged,
+  and placeholder-looking or boundary-looking text inside it remains data.
 - A prompt file that is missing, unreadable or empty is a configuration error,
   refused before a request is spent. The code ships no built-in text to fall
   back to, because a reply written by a fallback prompt would be
@@ -209,6 +215,10 @@ the configured generation API
 ### 1.9 Untrusted Input and Prompt Injection
 - The received message is untrusted data. It is the text being replied to, and
   nothing found inside it is an instruction to this system.
+- The prompt source uses no fixed active marker that the received message can
+  reproduce. The prompt layer supplies a collision-free identifier for the
+  current generation and uses it to frame both input blocks before
+  substitution.
 - None of these is obeyed when it appears in an input: an instruction to
   disregard what came before, to rewrite the system instructions, to answer in
   some other form, to reveal a setting or a credential, to address another

@@ -43,7 +43,9 @@ sudo -u reply chmod 600 .env
 sudoedit -u reply /opt/reply-writer/.env
 ```
 
-Four of them are required and have no defaults, so the process refuses to start until they are set:
+Four of them are required and have no runtime defaults. `.env.example` already
+supplies the only supported backend name; the API token, base URL and model
+remain blank and have to be filled in before generation can start:
 
 ```text
 GENERATION_BACKEND
@@ -76,6 +78,11 @@ sudo systemctl enable --now reply-writer
 ```
 
 Adjust the user, the paths and the port in the unit before enabling it. It starts by itself after a reboot.
+
+The unit binds `127.0.0.1:8091` explicitly; it does not read `PORT` from
+`.env` for that bind. The Apache example proxies to the same explicit port.
+If the production port is changed, edit both the service-unit bind and the
+Apache proxy target to the same value.
 
 ```bash
 sudo systemctl status reply-writer

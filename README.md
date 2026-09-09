@@ -92,9 +92,11 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Then edit `.env`. The required settings are identified in the
-[Configuration](#configuration) table and have no defaults, so nothing runs
-until all required values are filled in.
+Then edit `.env`. The four required settings are identified in the
+[Configuration](#configuration) table and have no runtime defaults.
+`.env.example` already names the only supported backend,
+`openai-compatible`; the API token, base URL and model remain blank and
+must be filled in before generation can start.
 
 Check the installation:
 
@@ -122,8 +124,8 @@ Every setting is read from the environment, or from a `.env` file beside the app
 | `MAX_INPUT_CHARS` | no | `8000` | Upper bound of the received message. |
 | `MAX_POLICY_CHARS` | no | `2000` | Upper bound of the direction. |
 | `PROMPT_DIR` | no | `prompts` | Directory holding the prompt files. |
-| `LOG_LEVEL` | no | `INFO` | Level of the application log. |
-| `PORT` | no | `8091` | Port of the development server and of gunicorn. |
+| `LOG_LEVEL` | no | `INFO` | Level of the application log. An unknown name uses `INFO`. |
+| `PORT` | no | `8091` | Port of the Flask development server and the Procfile gunicorn command. The systemd example binds explicitly to `8091`. |
 
 ### Choosing an endpoint
 
@@ -134,7 +136,11 @@ operator supplies them. With one of them missing, the process refuses to start r
 
 An unknown `GENERATION_BACKEND` is refused rather than coerced to a supported
 value. Accepted backend values are defined in `config.py` and documented in
-the Configuration table. A base URL that is plain `http`, carries user information, a query or a fragment, or already ends in `/chat/completions` is refused as well: the SDK appends the resource path itself.
+the Configuration table. `GENERATION_BASE_URL` must be an absolute HTTPS URL
+with a valid host and optional TCP port. A URL that uses plain `http`, has no
+host, has a malformed or invalid port, carries user information, a query or a
+fragment, or already ends in `/chat/completions` is refused before generation:
+the SDK appends the resource path itself.
 
 ### One action, one request
 
@@ -210,9 +216,18 @@ The message and the direction are read from a file or from standard input, never
 
 How a reply reads is decided by the prompts under `prompts/`, not by the code. Adjusting the register, the length, the formulae or the repetition is editing a file there; it never requires a change to Python. `reply_writer/formatter.py` touches whitespace, line endings and a code fence, and nothing else.
 
-The received message is untrusted data. It reaches the model inside a block marked as the text being replied to, and a sentence inside it that reads as an instruction to a model is answered as the correspondent's words rather than obeyed.
+The received message is untrusted data. For each generation the prompt layer
+wraps the direction and the received message in request-specific boundaries
+whose identifier occurs in neither input nor prompt source. Boundary-looking
+text inside the received message therefore remains part of the message rather
+than becoming prompt structure. The direction is the person's instruction for
+how the reply is written; the received message is never an instruction to the
+system.
 
-Pointing `PROMPT_DIR` at a directory of your own still has to satisfy the placeholder contract [doc/PROMPTS.md](doc/PROMPTS.md) fixes: a malformed set is refused before a generation request is spent.
+Pointing `PROMPT_DIR` at a directory of your own still uses the same runtime
+framing and has to satisfy the placeholder contract
+[doc/PROMPTS.md](doc/PROMPTS.md) fixes: `{{direction}}` and `{{message}}`
+remain the only required placeholders, each exactly once.
 
 [doc/PROMPTS.md](doc/PROMPTS.md) states what each file is for, what its output has to satisfy, and how a change to one is made.
 
@@ -245,6 +260,11 @@ Browser → HTTPS → Apache → 127.0.0.1:8091 → gunicorn → Flask → Gener
 ```
 
 `deploy/reply-writer.service` and `deploy/reply-writer.conf` are examples to copy and adjust. Neither carries a hostname, a certificate or a credential.
+
+The standard systemd unit and Apache example both name port `8091`
+explicitly. `PORT` in `.env` does not rewrite either deployment file. If the
+production bind port is changed, change the gunicorn bind in the service unit
+and the Apache proxy target to the same value.
 
 Private correspondence passes through this system, so it is not published to anyone who finds the address. Access control belongs to the web server in front of it — Basic authentication, an IP restriction, a VPN — and no account system is introduced into the application to provide it.
 

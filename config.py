@@ -73,11 +73,16 @@
 #  - PROMPT_DIR
 #      Directory holding the prompt files. Defaults to 'prompts'.
 #  - LOG_LEVEL
-#      Level of the application log. Defaults to INFO.
+#      Level of the application log. Defaults to INFO. An unknown level
+#      name is accepted and logging uses INFO.
 #  - PORT
-#      Port of the development server and of gunicorn. Defaults to 8091.
+#      Port of the Flask development server and the Procfile gunicorn
+#      command. Defaults to 8091. The systemd example binds its port
+#      explicitly instead of reading this setting.
 #
 #  Version History:
+#  v1.2 2026-09-09
+#       Refused malformed endpoint hosts and ports before generation.
 #  v1.1 2026-09-06
 #       Normalized CLI overrides and centralized --timeout validation.
 #  v1.0 2026-08-10
@@ -108,6 +113,11 @@ RESPONSE_MODES = ("json-object", "prompt-json")
 # Resource path the SDK appends itself. A base URL carrying it would
 # produce '/chat/completions/chat/completions' at the first request.
 RESOURCE_SUFFIX = "/chat/completions"
+
+BASE_URL_SHAPE_ERROR = (
+    "GENERATION_BASE_URL must be an absolute https URL with a valid host "
+    "and port."
+)
 
 
 class ConfigError(ValueError):
@@ -290,13 +300,19 @@ def _validate_base_url(url: str) -> None:
     if not url:
         raise ConfigError("GENERATION_BASE_URL is required.")
 
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+        hostname = parts.hostname
+        port = parts.port
+    except ValueError:
+        raise ConfigError(BASE_URL_SHAPE_ERROR)
+
     if parts.scheme == "http":
         raise ConfigError("GENERATION_BASE_URL must use https.")
-    if parts.scheme != "https" or not parts.netloc:
-        raise ConfigError(
-            "GENERATION_BASE_URL must be an absolute https URL, "
-            "for example https://api.example.net/v1.")
+    if (parts.scheme != "https" or not parts.netloc or not hostname
+            or any(character.isspace() for character in hostname)
+            or (port is not None and port < 1)):
+        raise ConfigError(BASE_URL_SHAPE_ERROR)
     if "@" in parts.netloc:
         raise ConfigError(
             "GENERATION_BASE_URL must not carry user information.")

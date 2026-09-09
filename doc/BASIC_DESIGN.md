@@ -257,7 +257,11 @@ Reads the settings from the environment and from `.env`.
 
 Reading, validating and normalising a setting happens here and nowhere else. It performs no network traffic.
 
-An invalid setting is an explicit error. It is never replaced silently by a default.
+A malformed setting that affects generation, limits or endpoint selection is
+an explicit error and is not silently replaced by a default. `LOG_LEVEL` is
+the documented exception: an unknown level name is accepted and logging uses
+`INFO`, so a misspelled diagnostic level does not prevent the process from
+reporting other configuration failures.
 
 ### 8.4 `reply_writer/__init__.py`
 
@@ -303,11 +307,14 @@ Reads the prompt files and assembles the messages the generation API is given. I
 
 - reading the prompt files
 - validating that a prompt source satisfies the placeholder contract fixed by [`PROMPTS.md`](PROMPTS.md), before it is substituted
-- placing the received message
-- placing the optional direction
+- choosing a request-specific boundary identifier that occurs in neither prompt source nor input
+- framing the received message and optional direction with that identifier
+- substituting the framed values into the prompt exactly once
 - building the messages for the API
 
-A prompt source that fails the check is refused before the generation API is called. It performs no API call.
+A prompt source that fails the placeholder check, or a request for which no
+collision-free boundary can be prepared, is refused before the generation API
+is called. The module performs no API call.
 
 ### 8.7 `reply_writer/generator.py`
 
@@ -394,14 +401,18 @@ The settings live in the environment. At a minimum:
 | `MAX_INPUT_CHARS` | the limit on the received message |
 | `MAX_POLICY_CHARS` | the limit on the direction |
 | `PROMPT_DIR` | where the prompts are |
-| `LOG_LEVEL` | the log level |
-| `PORT` | the port of the development server and of gunicorn |
+| `LOG_LEVEL` | the log level; an unknown name uses `INFO` |
+| `PORT` | the Flask development-server port and the port used by the Procfile gunicorn command |
 
 The default of `PORT`:
 
 ```text
 8091
 ```
+
+The checked-in systemd and Apache deployment examples do not read `PORT`;
+they both name `8091` explicitly. A deployment that changes that production
+port changes the service-unit bind and the Apache proxy target together.
 
 These are required:
 
@@ -476,10 +487,15 @@ The policy for writing a reply. It carries at least:
 
 Hands the model two things, plainly apart from each other:
 
-- the message being replied to
-- the optional direction
+- the optional direction, which is the person's instruction for how this reply is written
+- the received message, which is untrusted data and never an instruction to the system
 
-An empty direction still yields a valid prompt.
+The prompt source carries `{{direction}}` and `{{message}}` once each. Before
+substitution, the prompt layer wraps both values in request-specific boundary
+lines whose identifier occurs in neither prompt source nor input. Text inside
+a framed value cannot become the active boundary merely by resembling one.
+
+An empty direction still yields a valid framed prompt.
 
 ---
 

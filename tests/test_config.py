@@ -47,6 +47,9 @@
 #    - Refuse a missing, plain http or relative base URL.
 #    - Refuse a base URL carrying user information or a query.
 #    - Refuse a base URL that already holds the resource path.
+#    - Accept a base URL whose host is a bracketed IPv6 literal.
+#    - Refuse a base URL with no hostname, a malformed IPv6 authority, an
+#      invalid port, or whitespace in the hostname.
 #    - Refuse a missing model.
 #    - Keep the token out of every refusal message.
 #    - Trim a nonblank --model / --prompt-dir override, as the setting is.
@@ -67,8 +70,8 @@
 import unittest
 from unittest import mock
 
-from config import (Config, ConfigError, load_config, override_model,
-                    override_prompt_dir, override_timeout,
+from config import (BASE_URL_SHAPE_ERROR, Config, ConfigError, load_config,
+                    override_model, override_prompt_dir, override_timeout,
                     validate_generation_config)
 
 TOKEN = "00000000-0000-0000-0000-000000000000:secret-value"
@@ -290,6 +293,42 @@ class ValidateGenerationConfigTest(unittest.TestCase):
         with self.assertRaises(ConfigError) as refusal:
             validate_generation_config(usable_config(generation_model=""))
         self.assertIn("GENERATION_MODEL", str(refusal.exception))
+
+    def test_accepts_an_ipv6_base_url(self):
+        """ Accept a bracketed IPv6 literal carrying a valid port. """
+        validate_generation_config(usable_config(
+            generation_base_url="https://[2001:db8::1]:443/v1"))
+
+    def test_refuses_a_base_url_without_a_hostname(self):
+        """ Refuse a base URL whose authority carries no host. """
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(
+                usable_config(generation_base_url="https://:443/v1"))
+        self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_refuses_a_base_url_with_an_invalid_port(self):
+        """ Refuse a non-numeric port and a port outside 1..65535. """
+        for url in ("https://api.example.test:notaport/v1",
+                    "https://api.example.test:0/v1",
+                    "https://api.example.test:65536/v1"):
+            with self.assertRaises(ConfigError) as refusal:
+                validate_generation_config(
+                    usable_config(generation_base_url=url))
+            self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_refuses_a_malformed_ipv6_base_url(self):
+        """ Refuse an IPv6 authority whose closing bracket is missing. """
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(usable_config(
+                generation_base_url="https://[2001:db8::1/v1"))
+        self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_refuses_whitespace_in_the_base_url_hostname(self):
+        """ Refuse a hostname that carries whitespace. """
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(usable_config(
+                generation_base_url="https://api example.test/v1"))
+        self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
 
     def test_no_refusal_quotes_the_token(self):
         """ Keep the token out of every message, whatever was refused. """
