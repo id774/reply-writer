@@ -23,7 +23,7 @@
 #  counts, the request id — is carried as it comes; only an answer with
 #  no usable text, or one cut off by the output limit, is refused.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
