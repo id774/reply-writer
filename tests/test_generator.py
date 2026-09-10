@@ -21,7 +21,7 @@
 #  sends. The other is that nothing entered and nothing generated
 #  reaches the log, at any level.
 #
-#  Author: id774 (More info: http://id774.net)
+#  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
 #  License: The GPL version 3, or LGPL version 3 (Dual License).
 #  Contact: idnanashi@gmail.com
