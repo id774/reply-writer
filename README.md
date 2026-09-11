@@ -142,6 +142,38 @@ host, has a malformed or invalid port, carries user information, a query or a
 fragment, or already ends in `/chat/completions` is refused before generation:
 the SDK appends the resource path itself.
 
+**Kimi K3.** Kimi K3 is used through this same `openai-compatible`
+provider path; no Kimi-specific source code or backend is added for it.
+
+```env
+GENERATION_BACKEND=openai-compatible
+GENERATION_API_TOKEN=<Kimi API key>
+GENERATION_BASE_URL=https://api.moonshot.ai/v1
+GENERATION_MODEL=kimi-k3
+GENERATION_RESPONSE_MODE=prompt-json
+GENERATION_TEMPERATURE=
+```
+
+The base URL stops at `/v1`; do not write `/chat/completions`, since the
+SDK appends it itself. `GENERATION_RESPONSE_MODE=prompt-json` is used, so
+`response_format` is not required on this endpoint.
+`GENERATION_TEMPERATURE` is left empty, so nothing is sent for it. Kimi
+K3 uses thinking by default and its response may carry a
+`reasoning_content` field; no Kimi-specific reasoning setting, storage,
+display, or logging is added here. As with any endpoint configured here,
+a failure on this one does not fall back to another.
+
+Because this application exists to turn private messages into drafts,
+the privacy boundary is worth stating explicitly for this endpoint too:
+choosing Kimi means the pasted received message and direction are sent
+to the Kimi endpoint for generation, the same way they are sent to
+whichever endpoint `GENERATION_BASE_URL` names — this is the existing
+"send input to the configured generation endpoint" behavior, not a new
+data flow. The existing behavior that keeps the received message, the
+direction, the generated reply and the API token out of the application
+log and off disk is unchanged. The existing policy of never accepting
+the API token as a command-line option is unchanged as well.
+
 ### One action, one request
 
 `GENERATION_MAX_RETRIES` defaults to `0`, so one press of the generate button is one request to the endpoint. Raising it is an explicit operational decision, and it multiplies the worst case wait by the same factor.
