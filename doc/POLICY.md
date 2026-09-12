@@ -137,6 +137,10 @@ The settings decide where a private message is sent, so they are read strictly.
   requested of the API itself, is expressed as a named setting, and a mode that
   is configured and unavailable is an error rather than a reason to try the
   other one.
+- The request field that carries the output-token limit follows the same rule.
+  `GENERATION_OUTPUT_TOKEN_PARAMETER` selects `max_tokens` or
+  `max_completion_tokens`; the provider never guesses from a model or URL and
+  never retries a failed request under the other field name.
 - Do not read a legacy setting as its successor. A renamed variable is refused
   by name, so that a stale value cannot decide where a message goes.
 - Do not vary the number of API requests silently. Retries are the SDK's, and
@@ -195,6 +199,9 @@ the configured generation API
 - A change to how a reply reads is an edit to a prompt. Adding a rule about
   register, length, formulae or repetition to Python is the wrong place for it
   unless the rule is mechanical and cannot be expressed as an instruction.
+- Missing information does not authorize a new future undertaking. A reply may
+  promise to provide something later only where the message or the person's
+  direction already carries that undertaking.
 - The prompt keeps the message being replied to plainly apart from the
   instructions given by the system and by the person, and says which is which.
 - An empty direction still yields a valid prompt. The absence of a direction is
@@ -514,8 +521,12 @@ finally intended, and merges as if it had been written that way.
   configuration that cannot address an endpoint. Every path that reaches the
   API passes both; `cli.py --version` and the tests pass neither.
 - The four settings that address the endpoint have no defaults. A limit, a
-  timeout, a port and a log level may have one, and the default is written in
-  the header of `config.py` beside the name.
+  timeout, a port, a log level and an endpoint-compatibility selector may have
+  one, and the default is written in the header of `config.py` beside the name.
+- `GENERATION_OUTPUT_TOKEN_PARAMETER` is an explicit compatibility selector,
+  not capability detection. Its default is `max_tokens`; choosing
+  `max_completion_tokens` is an operator decision and changes only the request
+  field that carries `MAX_OUTPUT_TOKENS`.
 - No error message quotes a secret. A token is reported as present or absent,
   and the token is kept out of `__repr__`.
 - An empty or whitespace-only string setting reads as unset, so that a bare
@@ -562,6 +573,9 @@ finally intended, and merges as if it had been written that way.
 - Generation is requested with `POST`. Nothing a person entered goes into a
   query string, a cookie or a URL fragment, because those are recorded in
   places the application does not control.
+- The Web layer refuses a whole HTTP request body over 1 MiB before form
+  parsing. This transport limit is distinct from `MAX_INPUT_CHARS` and
+  `MAX_POLICY_CHARS`, which the shared generation core applies to field text.
 - The stylesheet is written mobile first. No small fixed width, no horizontal
   scroll, no action that needs a hover, no navigation that is not needed, and a
   copy that is visibly confirmed. A desktop layout is what the mobile layout

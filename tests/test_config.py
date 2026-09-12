@@ -32,6 +32,9 @@
 #    - Spend one request unless GENERATION_MAX_RETRIES says otherwise.
 #    - Treat a blank or whitespace-only value as unset.
 #    - Send no temperature unless GENERATION_TEMPERATURE is set.
+#    - Default the output-token request parameter to max_tokens.
+#    - Accept max_completion_tokens when explicitly selected.
+#    - Refuse an unknown output-token request parameter.
 #    - Refuse a value that is not a number, naming the setting.
 #    - Refuse a value float() reads as nan or as infinity.
 #    - Refuse a timeout that is not positive.
@@ -87,6 +90,7 @@ SETTINGS = (
     "GENERATION_TIMEOUT",
     "GENERATION_MAX_RETRIES",
     "GENERATION_TEMPERATURE",
+    "GENERATION_OUTPUT_TOKEN_PARAMETER",
     "MAX_OUTPUT_TOKENS",
     "MAX_INPUT_CHARS",
     "MAX_POLICY_CHARS",
@@ -132,6 +136,8 @@ class LoadConfigTest(unittest.TestCase):
         config = self.load()
         self.assertEqual(config.generation_response_mode, "prompt-json")
         self.assertEqual(config.generation_timeout, 120.0)
+        self.assertEqual(
+            config.generation_output_token_parameter, "max_tokens")
         self.assertEqual(config.max_output_tokens, 2000)
         self.assertEqual(config.max_input_chars, 8000)
         self.assertEqual(config.max_policy_chars, 2000)
@@ -150,9 +156,29 @@ class LoadConfigTest(unittest.TestCase):
 
     def test_blank_value_reads_as_unset(self):
         """ Treat a whitespace-only value exactly like an absent one. """
-        config = self.load(PROMPT_DIR="   ", GENERATION_MODEL="  ")
+        config = self.load(PROMPT_DIR="   ", GENERATION_MODEL="  ",
+                           GENERATION_OUTPUT_TOKEN_PARAMETER="   ")
         self.assertEqual(config.prompt_dir, "prompts")
         self.assertEqual(config.generation_model, "")
+        self.assertEqual(config.generation_output_token_parameter,
+                         "max_tokens")
+
+    def test_selects_the_output_token_parameter(self):
+        """ Accept max_completion_tokens when explicitly configured. """
+        config = self.load(
+            GENERATION_OUTPUT_TOKEN_PARAMETER="max_completion_tokens")
+        self.assertEqual(config.generation_output_token_parameter,
+                         "max_completion_tokens")
+
+    def test_refuses_an_unknown_output_token_parameter(self):
+        """ Name the accepted values when the setting is misspelled. """
+        with self.assertRaises(ConfigError) as refusal:
+            self.load(GENERATION_OUTPUT_TOKEN_PARAMETER="automatic")
+        message = str(refusal.exception)
+        self.assertIn("GENERATION_OUTPUT_TOKEN_PARAMETER", message)
+        self.assertIn("max_tokens", message)
+        self.assertIn("max_completion_tokens", message)
+        self.assertNotIn(TOKEN, message)
 
     def test_temperature_is_sent_only_when_set(self):
         """ Carry no temperature unless the setting names one. """

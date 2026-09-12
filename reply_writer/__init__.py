@@ -26,6 +26,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Fell back to INFO for logging attributes that are not level numbers.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -75,7 +77,10 @@ def configure_logging(level: str) -> None:
     # an entry point calls this twice: once before the settings are
     # read, so that a refused setting is reported in this format, and
     # once after, so the level LOG_LEVEL asks for takes effect.
-    logging.getLogger().setLevel(getattr(logging, level, logging.INFO))
+    configured_level = getattr(logging, level, None)
+    if type(configured_level) is not int:
+        configured_level = logging.INFO
+    logging.getLogger().setLevel(configured_level)
 
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)

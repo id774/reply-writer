@@ -5,13 +5,16 @@ v1.0.2 (Release Date: TBD)
 --------------------------
 - Align CLI overrides with config.py's normalization: fix --model/--prompt-dir
   blank handling and move --timeout's validity check into config.py.
-- Validate prompt sets before generation, so required placeholders are
-  present exactly once and forbidden or unknown placeholders are refused.
+- Validate prompt sets before generation, including multiline double-brace
+  forms, so required placeholders occur once and unknown forms are refused.
 - Reject using standard input for both CLI message and direction.
 - Frame prompt inputs with collision-free request boundaries, keeping received
   messages data and directions limited to reply-writing instructions.
-- Reject malformed endpoint hosts and ports before generation, and align
-  configuration, test isolation and deployment documentation.
+- Reject malformed endpoint hosts and ports before generation, keep LOG_LEVEL's
+  INFO fallback robust, and document configuration limits consistently.
+- Keep missing information from creating a future undertaking absent from input.
+- Add GENERATION_OUTPUT_TOKEN_PARAMETER so MAX_OUTPUT_TOKENS can use
+  max_tokens or max_completion_tokens without endpoint guessing.
 
 v1.0.1 (2026-08-26)
 -------------------

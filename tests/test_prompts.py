@@ -20,10 +20,10 @@
 #  set that omits, duplicates or adds one is refused before it is
 #  substituted, and a request is never reached.
 #
-#  The prompts shipped in prompts/ are checked for structure only. What
-#  they say is the subject of doc/PROMPTS.md, and pinning their wording
-#  in a test would make every adjustment to the writing a test to
-#  rewrite.
+#  The prompts shipped in prompts/ are normally checked for structure
+#  rather than wording. One focused assertion also guards the
+#  requirements invariant that missing information must not create a
+#  future undertaking absent from the input.
 #
 #  Before substitution, the message and the direction are each framed
 #  in a request-specific boundary whose identifier is regenerated when
@@ -67,6 +67,8 @@
 #    - Keep boundary-looking text inside the direction it arrived in.
 #    - Refuse a generation once every local boundary attempt has collided,
 #      logging neither the message nor the direction.
+#    - Refuse multiline unknown placeholders in user.md and system.md.
+#    - Keep missing information from authorizing an unprovided future undertaking.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -341,6 +343,10 @@ class UserPromptContractTest(unittest.TestCase):
         are present exactly once. """
         self.refuse("M:{{message}} D:{{direction}} X:{{unknown}}")
 
+    def test_refuses_a_multiline_unknown_placeholder(self):
+        """ Refuse an unknown placeholder whose braces span a line break. """
+        self.refuse("M:{{message}} D:{{direction}} X:{{unknown\nvalue}}")
+
     def test_keeps_the_path_out_of_the_user_message(self):
         """ Keep an internal path off the screen on a bad contract too. """
         self.prompts.write("user.md", "M:{{message}}")
@@ -380,6 +386,10 @@ class SystemPromptContractTest(unittest.TestCase):
         """ Refuse a system prompt that carries any other placeholder. """
         self.refuse("POLICY {{unknown}}")
 
+    def test_refuses_a_multiline_unknown_placeholder(self):
+        """ Refuse an unknown placeholder whose braces span a line break. """
+        self.refuse("POLICY {{unknown\nvalue}}")
+
 
 class ShippedPromptsTest(unittest.TestCase):
     """ Cover the structure of the prompts the repository ships. """
@@ -407,6 +417,23 @@ class ShippedPromptsTest(unittest.TestCase):
         self.assertNotIn("{{direction}}", messages[1]["content"])
         self.assertIn(MESSAGE, messages[1]["content"])
         self.assertIn(DIRECTION, messages[1]["content"])
+
+    def test_the_system_prompt_does_not_invent_a_future_undertaking(self):
+        """
+        Keep missing information from authorizing an invented undertaking.
+
+        The requirements forbid supplying an intention the input did not
+        carry. The prompt used to tell the model it could say a missing
+        answer "will follow" with no undertaking from the input to base
+        that on; it must now withhold that unless the direction already
+        carries it.
+        """
+        system = load_prompt("system.md", SHIPPED_PROMPTS)
+        self.assertNotIn("say that it will follow", system)
+        self.assertIn(
+            "Do not promise to provide information later unless the "
+            "direction already says that the person will do so.",
+            system)
 
 
 if __name__ == "__main__":

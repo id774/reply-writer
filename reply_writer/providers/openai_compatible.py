@@ -33,6 +33,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.1 2026-09-12
+#       Selected max_tokens or max_completion_tokens from configuration.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -104,8 +106,24 @@ class OpenAICompatibleProvider:
         request: Dict[str, Any] = {
             "model": config.generation_model,
             "messages": messages,
-            "max_tokens": config.max_output_tokens,
         }
+
+        # The wire field GENERATION_OUTPUT_TOKEN_PARAMETER selects. The
+        # else branch is not reachable through load_config(), which
+        # already refuses any other value; it guards a Config built by
+        # hand from ever being sent as max_completion_tokens by mistake.
+        if config.generation_output_token_parameter == "max_tokens":
+            request["max_tokens"] = config.max_output_tokens
+        elif config.generation_output_token_parameter == "max_completion_tokens":
+            request["extra_body"] = {
+                "max_completion_tokens": config.max_output_tokens,
+            }
+        else:
+            logger.error(
+                "Unknown GENERATION_OUTPUT_TOKEN_PARAMETER: %s",
+                config.generation_output_token_parameter,
+            )
+            raise InternalError("unknown output token parameter")
 
         # Sent only when configured, so that a model refusing the
         # parameter still runs and the endpoint default stays in place.

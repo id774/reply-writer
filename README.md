@@ -120,8 +120,9 @@ Every setting is read from the environment, or from a `.env` file beside the app
 | `GENERATION_TIMEOUT` | no | `120` | Seconds allowed for one request. |
 | `GENERATION_MAX_RETRIES` | no | `0` | Retries left to the SDK. |
 | `GENERATION_TEMPERATURE` | no | unset | Sent only when set. |
+| `GENERATION_OUTPUT_TOKEN_PARAMETER` | no | `max_tokens` | Request field that carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens`. |
 | `MAX_OUTPUT_TOKENS` | no | `2000` | Upper bound of one response. |
-| `MAX_INPUT_CHARS` | no | `8000` | Upper bound of the received message. |
+| `MAX_INPUT_CHARS` | no | `8000` | Upper bound of the received message in characters. Web request bodies are separately capped at 1 MiB. |
 | `MAX_POLICY_CHARS` | no | `2000` | Upper bound of the direction. |
 | `PROMPT_DIR` | no | `prompts` | Directory holding the prompt files. |
 | `LOG_LEVEL` | no | `INFO` | Level of the application log. An unknown name uses `INFO`. |
@@ -142,6 +143,18 @@ host, has a malformed or invalid port, carries user information, a query or a
 fragment, or already ends in `/chat/completions` is refused before generation:
 the SDK appends the resource path itself.
 
+### Choosing the output-token field
+
+`MAX_OUTPUT_TOKENS` is the numeric output limit. The separate
+`GENERATION_OUTPUT_TOKEN_PARAMETER` setting decides which Chat Completions
+request field carries it: `max_tokens` or `max_completion_tokens`.
+
+The default is `max_tokens`, which preserves the request shape existing
+deployments already use. Select `max_completion_tokens` explicitly for an
+endpoint that uses that field. The application does not infer this choice from
+the model name, the endpoint host or the base URL, and it never retries a
+failed request with the other field.
+
 **Kimi K3.** Kimi K3 is used through this same `openai-compatible`
 provider path; no Kimi-specific source code or backend is added for it.
 
@@ -152,13 +165,17 @@ GENERATION_BASE_URL=https://api.moonshot.ai/v1
 GENERATION_MODEL=kimi-k3
 GENERATION_RESPONSE_MODE=prompt-json
 GENERATION_TEMPERATURE=
+GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens
 ```
 
 The base URL stops at `/v1`; do not write `/chat/completions`, since the
 SDK appends it itself. `GENERATION_RESPONSE_MODE=prompt-json` is used, so
 `response_format` is not required on this endpoint.
-`GENERATION_TEMPERATURE` is left empty, so nothing is sent for it. Kimi
-K3 uses thinking by default and its response may carry a
+`GENERATION_TEMPERATURE` is left empty, so nothing is sent for it.
+`GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens` follows the current
+Kimi Chat Completions parameter contract, where `max_tokens` is deprecated in
+favour of `max_completion_tokens`; no Kimi-specific provider code is needed.
+Kimi K3 uses thinking by default and its response may carry a
 `reasoning_content` field; no Kimi-specific reasoning setting, storage,
 display, or logging is added here. As with any endpoint configured here,
 a failure on this one does not fall back to another.
@@ -216,6 +233,13 @@ It listens on `http://127.0.0.1:8091/`. In production gunicorn serves it behind 
 | `GET /` | The input screen: the message, the optional direction, and a way to generate. |
 | `POST /generate` | Generates one draft and shows it. |
 | `GET /healthz` | Says the process is up. It calls no API and returns no setting. |
+
+The Web layer also has a fixed transport limit: an HTTP request body over
+1 MiB is rejected with status `413` before Flask parses the form. This is a
+limit on the whole encoded request, not on the message field alone.
+`MAX_INPUT_CHARS` remains the generation-core character limit on the received
+message after parsing, and it applies to both the Web UI and the CLI. The CLI
+has no HTTP request-body limit.
 
 The input screen carries the message field, the optional direction field, and
 the generate button. The direction is marked optional and may be left empty, which is the ordinary case. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
