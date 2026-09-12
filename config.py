@@ -62,6 +62,10 @@
 #      the person costs one request.
 #  - GENERATION_TEMPERATURE
 #      Sent only when set, so that a model refusing the parameter runs.
+#  - GENERATION_OUTPUT_TOKEN_PARAMETER
+#      Request field that carries MAX_OUTPUT_TOKENS. Accepted values
+#      are 'max_tokens' and 'max_completion_tokens'. Defaults to
+#      max_tokens for compatibility with existing deployments.
 #  - MAX_OUTPUT_TOKENS
 #      Upper bound of one response. Defaults to 2000.
 #  - MAX_INPUT_CHARS
@@ -81,6 +85,8 @@
 #      explicitly instead of reading this setting.
 #
 #  Version History:
+#  v1.3 2026-09-12
+#       Added explicit selection of the output-token request parameter.
 #  v1.2 2026-09-09
 #       Refused malformed endpoint hosts and ports before generation.
 #  v1.1 2026-09-06
@@ -110,6 +116,11 @@ GENERATION_BACKENDS = ("openai-compatible",)
 # generation into two requests, and hides which of them was used.
 RESPONSE_MODES = ("json-object", "prompt-json")
 
+# Request field GENERATION_OUTPUT_TOKEN_PARAMETER may name to carry
+# MAX_OUTPUT_TOKENS. There is no 'auto': the field is a wire-compatibility
+# choice, not a capability the code infers from a model or an endpoint.
+OUTPUT_TOKEN_PARAMETERS = ("max_tokens", "max_completion_tokens")
+
 # Resource path the SDK appends itself. A base URL carrying it would
 # produce '/chat/completions/chat/completions' at the first request.
 RESOURCE_SUFFIX = "/chat/completions"
@@ -136,6 +147,7 @@ class Config:
     generation_timeout: float = 120.0
     generation_max_retries: int = 0
     generation_temperature: Optional[float] = None
+    generation_output_token_parameter: str = "max_tokens"
     max_output_tokens: int = 2000
     max_input_chars: int = 8000
     max_policy_chars: int = 2000
@@ -238,6 +250,16 @@ def load_config() -> Config:
     timeout = _validate_timeout(_number("GENERATION_TIMEOUT", 120.0),
                                 _text("GENERATION_TIMEOUT", ""))
 
+    output_token_parameter = _text(
+        "GENERATION_OUTPUT_TOKEN_PARAMETER", "max_tokens")
+    if output_token_parameter not in OUTPUT_TOKEN_PARAMETERS:
+        raise ConfigError(
+            "GENERATION_OUTPUT_TOKEN_PARAMETER is '{0}'; expected one of: "
+            "{1}.".format(
+                output_token_parameter,
+                ", ".join(OUTPUT_TOKEN_PARAMETERS),
+            ))
+
     port = _whole("PORT", 8091, 1)
     if port > 65535:
         raise ConfigError(
@@ -252,6 +274,7 @@ def load_config() -> Config:
         generation_timeout=timeout,
         generation_max_retries=_whole("GENERATION_MAX_RETRIES", 0, 0),
         generation_temperature=temperature,
+        generation_output_token_parameter=output_token_parameter,
         max_output_tokens=_whole("MAX_OUTPUT_TOKENS", 2000, 1),
         max_input_chars=_whole("MAX_INPUT_CHARS", 8000, 1),
         max_policy_chars=_whole("MAX_POLICY_CHARS", 2000, 1),

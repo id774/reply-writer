@@ -33,6 +33,7 @@
 #    - Derive a request id from nothing that was entered.
 #    - Apply the configured level to the application log.
 #    - Read an unknown level as INFO rather than refuse to run.
+#    - Read a logging-module attribute that is not a level as INFO.
 #    - Apply a level again once the settings have been read.
 #    - Keep the client loggers quiet, even at DEBUG.
 #
@@ -108,6 +109,17 @@ class ConfigureLoggingTest(unittest.TestCase):
     def test_reads_an_unknown_level_as_info(self):
         """ Refuse no run over a misspelled level. """
         configure_logging("VERBOSE")
+        self.assertEqual(logging.getLogger().level, logging.INFO)
+
+    def test_reads_a_non_level_logging_attribute_as_info(self):
+        """
+        Fall back to INFO for a logging-module attribute that is not a level.
+
+        BASIC_FORMAT exists on the logging module but is a string rather
+        than an integer level, so getattr() would return it instead of
+        falling through to the default, and setLevel() would then raise.
+        """
+        configure_logging("BASIC_FORMAT")
         self.assertEqual(logging.getLogger().level, logging.INFO)
 
     def test_applies_a_level_on_a_second_call(self):

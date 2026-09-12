@@ -284,6 +284,11 @@ ReplyDraft
 
 `notices` carries mechanical remarks about the result where there are any. It stays plainly apart from the reply body and never enters what is copied.
 
+Logging configuration accepts standard integer logging levels by name.
+A name that is absent from the `logging` module, or names an attribute that
+is not an integer logging level, uses `INFO`; a malformed diagnostic level
+does not stop generation.
+
 ### 8.5 `reply_writer/errors.py`
 
 Defines the exceptions the application uses.
@@ -354,8 +359,17 @@ The initial version implements a provider for an OpenAI-compatible Chat Completi
 - translating an API error
 - retrieving the response string
 - retrieving the metadata, the model used among it
+- sending `MAX_OUTPUT_TOKENS` through the request field selected by
+  `GENERATION_OUTPUT_TOKEN_PARAMETER`, without inferring one from a model or URL
 
 Deciding how a reply is written is no business of this layer.
+
+The compatibility default is `max_tokens`. Where
+`GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens`, the provider sends
+that wire field through the SDK's extra request body so the Python dependency
+can remain compatible with the repository's existing minimum version.
+A rejected field is an endpoint error; it is never retried under the other
+name.
 
 ---
 
@@ -397,12 +411,21 @@ The settings live in the environment. At a minimum:
 | `GENERATION_TIMEOUT` | the limit on one API call |
 | `GENERATION_MAX_RETRIES` | how many times a call is retried |
 | `GENERATION_TEMPERATURE` | an optional temperature |
+| `GENERATION_OUTPUT_TOKEN_PARAMETER` | which Chat Completions field carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens` |
 | `MAX_OUTPUT_TOKENS` | the output limit |
-| `MAX_INPUT_CHARS` | the limit on the received message |
+| `MAX_INPUT_CHARS` | the generation-core character limit on the received message |
 | `MAX_POLICY_CHARS` | the limit on the direction |
 | `PROMPT_DIR` | where the prompts are |
 | `LOG_LEVEL` | the log level; an unknown name uses `INFO` |
 | `PORT` | the Flask development-server port and the port used by the Procfile gunicorn command |
+
+`GENERATION_OUTPUT_TOKEN_PARAMETER` defaults to `max_tokens` for compatibility
+with existing deployments. Selecting `max_completion_tokens` is explicit;
+model names and endpoint URLs are not capability detection.
+
+The Web layer has a separate fixed request-body limit of 1 MiB. That limit
+applies to the whole encoded HTTP request before form parsing and does not
+change `MAX_INPUT_CHARS`, which is shared by the Web UI and CLI.
 
 The default of `PORT`:
 
@@ -472,6 +495,8 @@ The policy for writing a reply. It carries at least:
 
 - Write a natural Japanese reply.
 - Invent no fact the received message did not carry.
+- Do not invent a future undertaking, including a promise to provide missing
+  information later, unless the message or direction already carries it.
 - Where a direction is present, let it govern.
 - Write a draft even where no direction is present.
 - Do not repeat the correspondent's text unnecessarily.
@@ -547,12 +572,18 @@ Shows the input screen.
 
 ### `POST /generate`
 
-Receives:
+The Web layer refuses an HTTP request body over 1 MiB with status `413`
+before parsing its form.
+
+For an accepted request body it receives:
 
 - the received message
 - the optional direction
 
-Calls the generation core and returns the result screen.
+The generation core then applies `MAX_INPUT_CHARS` and `MAX_POLICY_CHARS`.
+Those are character limits on the two fields, not the 1 MiB HTTP-body limit.
+
+It calls the generation core and returns the result screen.
 
 ### `GET /healthz`
 
@@ -791,7 +822,8 @@ An error is classified inside the application and turned into something safe to 
 | Error | HTTP |
 | --- | ---: |
 | empty input | 400 |
-| input too large | 400 |
+| input too large for its configured character limit | 400 |
+| HTTP request body over the Web 1 MiB limit | 413 |
 | the API could not be reached | 502 |
 | an API status error | 502 |
 | an API timeout | 504 |

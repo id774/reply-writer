@@ -41,7 +41,8 @@
 #    - Hand the token and the base URL to the SDK.
 #    - Pass the base URL even when it is empty, so the SDK never falls back.
 #    - Spend one request by default, with the configured timeout.
-#    - Send the model, the messages and the output limit.
+#    - Send MAX_OUTPUT_TOKENS as max_tokens by default.
+#    - Send it as max_completion_tokens through extra_body when configured.
 #    - Ask for a JSON object under json-object mode.
 #    - Send no response format under prompt-json mode.
 #    - Send no temperature unless it is set, and send it when it is.
@@ -78,8 +79,9 @@ import unittest
 from types import ModuleType, SimpleNamespace
 
 from config import Config
-from reply_writer.errors import (InvalidResponseError, UpstreamConnectionError,
-                                 UpstreamStatusError, UpstreamTimeoutError)
+from reply_writer.errors import (InternalError, InvalidResponseError,
+                                 UpstreamConnectionError, UpstreamStatusError,
+                                 UpstreamTimeoutError)
 from reply_writer.providers.openai_compatible import OpenAICompatibleProvider
 
 TOKEN = "00000000-0000-0000-0000-000000000000:secret-value"
@@ -236,12 +238,34 @@ class ClientTest(ProviderTestCase):
 class RequestTest(ProviderTestCase):
     """ Cover the one request the provider assembles. """
 
-    def test_sends_the_model_the_messages_and_the_limit(self):
+    def test_sends_the_model_and_the_messages(self):
         """ Send what one generation needs and nothing more. """
         self.complete()
         self.assertEqual(self.sdk.request["model"], "configured-model")
         self.assertEqual(self.sdk.request["messages"], MESSAGES)
+
+    def test_sends_max_tokens_by_default(self):
+        """ Carry MAX_OUTPUT_TOKENS as max_tokens without configuration. """
+        self.complete()
         self.assertEqual(self.sdk.request["max_tokens"], 2000)
+        self.assertNotIn("extra_body", self.sdk.request)
+
+    def test_sends_max_completion_tokens_when_configured(self):
+        """ Carry MAX_OUTPUT_TOKENS through extra_body when selected. """
+        self.complete(settings=config(
+            generation_output_token_parameter="max_completion_tokens"))
+        self.assertNotIn("max_tokens", self.sdk.request)
+        self.assertEqual(self.sdk.request["extra_body"],
+                         {"max_completion_tokens": 2000})
+
+    def test_refuses_an_unknown_output_token_parameter_before_a_request(self):
+        """ Refuse a hand-built Config before spending a request on it. """
+        with self.assertLogs("reply_writer.providers.openai_compatible",
+                             "ERROR"):
+            with self.assertRaises(InternalError):
+                self.complete(settings=config(
+                    generation_output_token_parameter="automatic"))
+        self.assertIsNone(self.sdk.request)
 
     def test_asks_for_a_json_object_under_json_object_mode(self):
         """ Ask the API itself for an object in that mode. """

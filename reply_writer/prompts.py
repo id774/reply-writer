@@ -40,6 +40,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.3 2026-09-12
+#       Refused multiline double-brace placeholders in prompt sources.
 #  v1.2 2026-09-09
 #       Framed prompt inputs with collision-free request boundaries.
 #  v1.1 2026-09-07
@@ -69,7 +71,7 @@ PLACEHOLDER = re.compile(r"\{\{(message|direction)\}\}")
 # Every double-brace token in a prompt source, reserved as placeholder
 # syntax. Matched against the source text alone, never against data
 # already substituted into it.
-ANY_PLACEHOLDER = re.compile(r"\{\{.*?\}\}")
+ANY_PLACEHOLDER = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 
 REQUIRED_USER_PLACEHOLDERS = ("{{message}}", "{{direction}}")
 

@@ -200,6 +200,8 @@ class RouteTest(WebTestCase):
         self.assertEqual(web.config.generation_timeout, 120.0)
         self.assertEqual(web.config.generation_max_retries, 0)
         self.assertIsNone(web.config.generation_temperature)
+        self.assertEqual(
+            web.config.generation_output_token_parameter, "max_tokens")
         self.assertEqual(web.config.max_output_tokens, 2000)
         self.assertEqual(web.config.max_input_chars, 8000)
         self.assertEqual(web.config.max_policy_chars, 2000)

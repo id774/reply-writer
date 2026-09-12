@@ -75,6 +75,8 @@ At a minimum, and in whatever wording reads best:
 
 - Write a natural Japanese reply to the message that was entered.
 - Invent no fact the message and the direction did not carry.
+- Do not invent a future undertaking, including a promise to provide missing
+  information later, unless the message or the direction already carries it.
 - Where a direction is present, let it govern.
 - Where none is present, still write a natural reply.
 - Do not repeat the correspondent's text unnecessarily.
