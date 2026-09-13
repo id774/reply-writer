@@ -18,7 +18,8 @@
 14. [The Japanese that stays](#the-japanese-that-stays)
 15. [Not implemented](#not-implemented)
 16. [Contribution](#contribution)
-17. [License](#license)
+17. [Primary Branch](#primary-branch)
+18. [License](#license)
 
 ## Overview
 
@@ -41,10 +42,6 @@ copy
 ↓
 read it once more and send it yourself
 ```
-
-This repository uses `master` as its primary branch name.
-
-The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
 
 ## What it does
 
@@ -385,6 +382,12 @@ Should one of them become necessary, the requirements change first and the desig
 Contributions are welcome. The useful ones are the ones that keep the path short: paste, direct where needed, generate, copy.
 
 Please follow the style used in this repository: English comments and documents, the module header each file carries, and documentation updated together with the code. [doc/POLICY.md](doc/POLICY.md) states the rules a change is judged by.
+
+## Primary Branch
+
+This repository uses `master` as its primary branch name.
+
+The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
 
 ## License
 
