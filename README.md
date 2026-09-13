@@ -18,7 +18,8 @@
 14. [The Japanese that stays](#the-japanese-that-stays)
 15. [Not implemented](#not-implemented)
 16. [Contribution](#contribution)
-17. [License](#license)
+17. [Branch Naming](#branch-naming)
+18. [License](#license)
 
 ## Overview
 
@@ -382,11 +383,13 @@ Contributions are welcome. The useful ones are the ones that keep the path short
 
 Please follow the style used in this repository: English comments and documents, the module header each file carries, and documentation updated together with the code. [doc/POLICY.md](doc/POLICY.md) states the rules a change is judged by.
 
-## License
-
-This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
-For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
+## Branch Naming
 
 This repository uses `master` as its primary branch name.
 
 The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
+
+## License
+
+This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
+For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
