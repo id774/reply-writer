@@ -662,6 +662,7 @@ Mobile first.
 - No small fixed width is used.
 - No main action needs a hover.
 - A copy is visibly confirmed.
+- Submitting a generation shows an immediate sign that it was accepted.
 - No navigation is there that need not be.
 
 The main path is this and nothing else:
@@ -680,9 +681,12 @@ copy
 
 ## 20. JavaScript
 
-As little as the screens can be built with. In the initial version it is chiefly the Clipboard API, for copying.
+As little as the screens can be built with. Beyond the Clipboard API, for copying, it also:
 
-Generation is never sent to the API from JavaScript. The token and the endpoint of the generation API never reach the browser. The generation traffic always leaves from the server.
+- shows the message and the direction fields' current length against their configured limit while the person types, and
+- gives a generation submit immediate feedback — a "Generating..." notice, the submit control disabled, and the same in-flight submission held to one — before the browser's ordinary POST leaves for the server.
+
+Generation is never sent to the API from JavaScript. The token and the endpoint of the generation API never reach the browser. The generation traffic always leaves from the server, as the native form submission that `POST /generate` already accepts. Where a browser runs no script, the character count and the submit feedback are absent, and generation still succeeds through that same native form submission.
 
 ---
 

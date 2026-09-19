@@ -31,6 +31,7 @@ label {
 
 .optional { color: #666; font-weight: 400; }
 .hint { color: #666; font-size: 0.85rem; margin: 0.1rem 0 0.3rem; }
+.count { color: #666; font-size: 0.85rem; margin: 0.2rem 0 0; text-align: right; }
 
 textarea {
   font-family: inherit;

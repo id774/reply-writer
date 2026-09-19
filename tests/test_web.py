@@ -64,12 +64,18 @@
 #    - Load no script and no style from another host.
 #    - Load every optional setting at its documented default, so the
 #      isolated test environment carries none of them from a real .env.
+#    - Give the message and the direction fields a character-count hook
+#      at their own configured limit.
+#    - Serve a script that carries the character-count and the generation
+#      submit-feedback helpers.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Flask
 #
 #  Version History:
+#  v1.1 2026-09-19
+#       Covered the character-count hooks and the submit-feedback script.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -154,6 +160,30 @@ class RouteTest(WebTestCase):
         self.assertIn('name="message"', page)
         self.assertIn('name="direction"', page)
         self.assertIn("(optional)", page)
+
+    def test_input_screen_has_the_character_count_contract(self):
+        """ Give both bounded fields a counter hook at their own limit. """
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn(
+            'maxlength="{0}"'.format(web.config.max_input_chars), page)
+        self.assertIn(
+            'maxlength="{0}"'.format(web.config.max_policy_chars), page)
+        self.assertIn('data-character-count-target="message-count"', page)
+        self.assertIn('id="message-count"', page)
+        self.assertIn('data-character-count-target="direction-count"', page)
+        self.assertIn('id="direction-count"', page)
+
+    def test_web_script_contains_progressive_generation_helpers(self):
+        """ Serve the character-count and submit-feedback helpers. """
+        answer = self.client.get("/static/copy.js")
+        self.assertEqual(answer.status_code, 200)
+        script = answer.get_data(as_text=True)
+        self.assertIn("data-character-count-target", script)
+        self.assertIn('addEventListener("submit"', script)
+        self.assertIn("disabled = true", script)
+        self.assertIn("data-submitting", script)
+        self.assertIn("aria-busy", script)
+        self.assertIn("Generating...", script)
 
     def test_liveness_probe_calls_no_api(self):
         """ Answer as a web application and do nothing else. """
