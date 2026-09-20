@@ -15,6 +15,8 @@ v1.0.2 (Release Date: TBD)
 - Keep missing information from creating a future undertaking absent from input.
 - Add GENERATION_OUTPUT_TOKEN_PARAMETER so MAX_OUTPUT_TOKENS can use
   max_tokens or max_completion_tokens without endpoint guessing.
+- Show a live character count on the message and direction fields, and add
+  a Generating notice with submit disable and duplicate-submit suppression.
 
 v1.0.1 (2026-08-26)
 -------------------

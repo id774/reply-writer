@@ -243,7 +243,7 @@ message after parsing, and it applies to both the Web UI and the CLI. The CLI
 has no HTTP request-body limit.
 
 The input screen carries the message field, the optional direction field, and
-the generate button. The direction is marked optional and may be left empty, which is the ordinary case. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
+the generate button. The direction is marked optional and may be left empty, which is the ordinary case. Where the browser runs the page's script, the message and direction fields show a running character count, and submitting shows an immediate "Generating..." notice with the button disabled while the request is in flight; with script unavailable, the same POST to `/generate` still generates a draft. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
 
 ### From the command line
 

@@ -3,11 +3,17 @@
 {% block content %}
 <form method="post" action="{{ url_for('generate') }}">
   <label for="message">Message you are replying to</label>
-  <textarea id="message" name="message" lang="ja" rows="10" maxlength="{{ max_input_chars }}" autofocus>{{ message or "" }}</textarea>
+  <textarea id="message" name="message" lang="ja" rows="10" maxlength="{{ max_input_chars }}"
+            aria-describedby="message-count"
+            data-character-count-target="message-count" autofocus>{{ message or "" }}</textarea>
+  <p id="message-count" class="count"></p>
 
   <label for="direction">Direction <span class="optional">(optional)</span></label>
   <p class="hint">Leave it empty and a reply is written from the message alone.</p>
-  <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}">{{ direction or "" }}</textarea>
+  <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}"
+            aria-describedby="direction-count"
+            data-character-count-target="direction-count">{{ direction or "" }}</textarea>
+  <p id="direction-count" class="count"></p>
 
   <div class="buttons">
     <button type="submit">Generate a draft</button>

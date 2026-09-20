@@ -324,6 +324,10 @@ At a minimum:
 
 The direction field is plainly marked optional.
 
+Both fields are bounded, and where a browser can run script, the person sees
+how many of the allowed characters they have used while they type, so that
+the limit is not discovered only after a refusal.
+
 ### 18.2 Result
 
 The draft is shown plainly, and the reply body is easy to copy. Where a subject is shown, the subject and the body are copied separately.
@@ -336,6 +340,8 @@ The phone is a primary environment, not an afterthought. What matters:
 - a small screen is workable
 - the main actions take few taps
 - no settings screen has to be passed through
+- generating shows an immediate sign that the request was accepted, where
+  script can run, so a slow connection does not read as a missed tap
 - the reply can be copied immediately after it is generated
 - nothing scrolls sideways
 - no long explanation sits permanently on the working screen
