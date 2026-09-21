@@ -57,10 +57,13 @@
 #    - Refuse a timeout that is not positive, before a request.
 #    - Refuse a timeout that is not finite, before a request.
 #    - Refuse a configuration that cannot address an endpoint, exiting 1.
-#    - Exit 1 on an unreadable message file.
+#    - Exit 1 on an unreadable message file, logging the exception class
+#      without its raw message or the file's path.
 #    - Exit 1 on an empty message, and on an upstream failure.
 #    - Exit 1 on a message or a direction file that is not valid UTF-8,
 #      without a traceback and without a request being spent.
+#    - Exit 1 on an unexpected exception, without its own message or a
+#      traceback escaping, logging its class and stack frames once.
 #    - Log the diagnostic of a ReplyWriterError exactly once.
 #    - Write no message, direction or reply to the log.
 #
@@ -70,7 +73,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Covered non-UTF-8 input refusal and the single diagnostic log line.
+#       Covered sanitized input-read and unexpected failures, non-UTF-8
+#       refusal, and the single diagnostic log line.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -463,11 +467,20 @@ class FailureTest(CliTestCase):
         self.generate.assert_not_called()
 
     def test_exits_one_on_an_unreadable_message_file(self):
-        """ Report a file that cannot be read, without a traceback. """
-        status = self.run_cli(["generate", "--message",
-                               os.path.join(self.directory.name, "absent")])
+        """
+        Report a file that cannot be read, without a traceback.
+
+        The log names the exception class only. The raw OSError message,
+        which can carry a platform-specific string, and the path itself
+        stay out of it.
+        """
+        absent = os.path.join(self.directory.name, "absent")
+        status = self.run_cli(["generate", "--message", absent])
         self.assertEqual(status, 1)
+        self.generate.assert_not_called()
         self.assertNotIn("Traceback", self.logged)
+        self.assertIn("FileNotFoundError", self.logged)
+        self.assertNotIn(absent, self.logged)
 
     def test_exits_one_on_an_upstream_failure(self):
         """ Report a failed generation as a failed command. """
@@ -475,6 +488,27 @@ class FailureTest(CliTestCase):
                               result=UpstreamTimeoutError())
         self.assertEqual(status, 1)
         self.assertIn("UpstreamTimeoutError", self.logged)
+
+    def test_exits_one_on_an_unexpected_exception_without_its_message(self):
+        """
+        Report an unmapped exception without letting it escape as a traceback.
+
+        Every exception reply_writer.errors maps is caught above this
+        one; anything else is unexpected. It is logged once, with the
+        exception's class and its traceback's stack frames, and its own
+        message never reaches the log, standard error or a printed
+        reply.
+        """
+        status = self.run_cli(
+            ["generate", "--message", self.message_file],
+            result=RuntimeError("SENSITIVE_EXCEPTION_TEXT"))
+        self.assertEqual(status, 1)
+        self.assertIn("RuntimeError", self.logged)
+        self.assertIn("File ", self.logged)
+        self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", self.logged)
+        self.assertNotIn("Traceback", self.err.getvalue())
+        self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", self.err.getvalue())
+        self.assertEqual(self.printed, "")
 
     def test_exits_one_on_a_non_utf8_message_file(self):
         """

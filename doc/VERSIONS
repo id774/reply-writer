@@ -18,8 +18,8 @@ v1.0.2 (Release Date: TBD)
 - Show live message/direction counts, match server limits to textarea length,
   and add Generating feedback with duplicate-submit suppression.
 - Refuse non-UTF-8 CLI inputs and prompt files without exposing a traceback.
-- Log failures once at entry points, including provider selection, without raw
-  exception text.
+- Log failures once at entry points without raw exception, file-error or
+  client-request path text.
 - Require a usable finish reason before accepting a generation response.
 - Make the Procfile use port 8091 when PORT is unset.
 - Refuse non-standard NaN and Infinity constants in generated JSON responses.

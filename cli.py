@@ -72,7 +72,8 @@
 #
 #  Version History:
 #  v1.3 2026-09-21
-#       Refused non-UTF-8 inputs and logged sanitized failures once.
+#       Refused non-UTF-8 input, sanitized file and unexpected failures,
+#       and logged application failures once.
 #  v1.2 2026-09-08
 #       Refused simultaneous standard-input sources for message and direction.
 #  v1.1 2026-09-06
@@ -87,6 +88,7 @@ import dataclasses
 import json
 import logging
 import sys
+import traceback
 from typing import Optional
 
 from config import (ConfigError, load_config, override_model,
@@ -150,6 +152,15 @@ def read_text(path: Optional[str]) -> str:
         return sys.stdin.read()
     with open(path, encoding="utf-8") as handle:
         return handle.read()
+
+
+def _unexpected_diagnostic(error: Exception) -> str:
+    """ Build a sanitized diagnostic for an unexpected exception. """
+    frames = "".join(traceback.format_tb(error.__traceback__))
+    stack = " ".join(frames.split())
+    if stack:
+        return "{0}: {1}".format(type(error).__name__, stack)
+    return type(error).__name__
 
 
 def report(draft: ReplyDraft, as_json: bool) -> None:
@@ -238,7 +249,18 @@ def main() -> int:
         logger.error("Cannot read the input: the file is not valid UTF-8.")
         return 1
     except OSError as error:
-        logger.error("Cannot read the input: %s", error)
+        # The exception class names the kind of failure; its own
+        # message may carry a path or a platform-specific string that
+        # does not belong in the log.
+        logger.error("Cannot read the input: %s.", type(error).__name__)
+        return 1
+    except Exception as error:
+        # Every mapped failure is caught above; anything left is
+        # unexpected. It is reported the same way app.py reports one:
+        # a sanitized diagnostic built from the exception's class and
+        # its traceback's stack frames, with no traceback reaching the
+        # terminal and no own message reaching the log.
+        logger.error("Unexpected failure: %s", _unexpected_diagnostic(error))
         return 1
 
     report(draft, arguments.json)
