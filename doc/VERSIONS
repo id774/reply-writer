@@ -22,6 +22,7 @@ v1.0.2 (Release Date: TBD)
 - Require a usable finish reason before accepting a generation response.
 - Make the Procfile use port 8091 when PORT is unset.
 - Refuse non-standard NaN and Infinity constants in generated JSON responses.
+- Refuse unknown response modes in the provider before sending a request.
 
 v1.0.1 (2026-08-26)
 -------------------

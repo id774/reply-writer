@@ -408,6 +408,12 @@ surrounding whitespace: an unrecognized reason is not assumed to mean a
 truncation, since a compatible endpoint may use a name of its own for an
 ordinary stop.
 
+The provider also refuses a response mode other than `prompt-json` or
+`json-object` before calling the SDK. `load_config()` already refuses such a
+value in normal operation, but the provider does not silently read an invalid
+hand-built `Config` as `prompt-json`; each wire mode has to be named
+explicitly.
+
 This layer raises an SDK failure, an unknown output-token parameter, a
 missing `openai` package, or an invalid response, as one of
 `reply_writer.errors`'s classes carrying a sanitized `diagnostic` — the
