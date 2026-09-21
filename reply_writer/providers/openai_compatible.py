@@ -33,6 +33,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.2 2026-09-21
+#       Required a usable finish reason and carried sanitized failure diagnostics.
 #  v1.1 2026-09-12
 #       Selected max_tokens or max_completion_tokens from configuration.
 #  v1.0 2026-08-10
@@ -40,7 +42,6 @@
 #
 ########################################################################
 
-import logging
 import time
 from typing import Any, Dict, List, Optional
 
@@ -49,8 +50,6 @@ from reply_writer.errors import (InternalError, InvalidResponseError,
                                  UpstreamConnectionError, UpstreamStatusError,
                                  UpstreamTimeoutError)
 from reply_writer.providers import CompletionResult, log_response
-
-logger = logging.getLogger(__name__)
 
 # Finish reasons that mean the output hit its limit. A truncated reply
 # is not offered as a draft: half a sentence pasted into a message is
@@ -85,9 +84,8 @@ class OpenAICompatibleProvider:
         """ Build the client described by the configuration. """
         try:
             from openai import OpenAI
-        except ImportError as error:
-            logger.error("The openai package is not installed: %s", error)
-            raise InternalError("openai package missing")
+        except ImportError:
+            raise InternalError("openai package missing") from None
 
         # base_url is passed unconditionally. An empty value would let
         # the SDK fall back to its own endpoint, which is the one thing
@@ -119,11 +117,9 @@ class OpenAICompatibleProvider:
                 "max_completion_tokens": config.max_output_tokens,
             }
         else:
-            logger.error(
-                "Unknown GENERATION_OUTPUT_TOKEN_PARAMETER: %s",
-                config.generation_output_token_parameter,
-            )
-            raise InternalError("unknown output token parameter")
+            raise InternalError(
+                "unknown output token parameter: {0}".format(
+                    config.generation_output_token_parameter))
 
         # Sent only when configured, so that a model refusing the
         # parameter still runs and the endpoint default stays in place.
@@ -159,32 +155,30 @@ class OpenAICompatibleProvider:
         try:
             return client.chat.completions.create(**request)
         except openai.APITimeoutError as error:
-            self._log_failure(config, error, None, started, request_id)
-            raise UpstreamTimeoutError()
+            raise UpstreamTimeoutError(self._failure_diagnostic(
+                config, error, None, started, request_id)) from None
         except openai.APIConnectionError as error:
-            self._log_failure(config, error, None, started, request_id)
-            raise UpstreamConnectionError()
+            raise UpstreamConnectionError(self._failure_diagnostic(
+                config, error, None, started, request_id)) from None
         except openai.APIStatusError as error:
-            self._log_failure(config, error,
-                              getattr(error, "status_code", None), started,
-                              request_id)
-            raise UpstreamStatusError()
+            raise UpstreamStatusError(self._failure_diagnostic(
+                config, error, getattr(error, "status_code", None), started,
+                request_id)) from None
         except openai.APIError as error:
-            self._log_failure(config, error,
-                              getattr(error, "status_code", None), started,
-                              request_id)
-            raise InvalidResponseError()
+            raise InvalidResponseError(self._failure_diagnostic(
+                config, error, getattr(error, "status_code", None), started,
+                request_id)) from None
 
-    def _log_failure(self, config: Config, error: Exception,
-                     status_code: Optional[int], started: float,
-                     request_id: str) -> None:
+    def _failure_diagnostic(self, config: Config, error: Exception,
+                            status_code: Optional[int], started: float,
+                            request_id: str) -> str:
         """
-        Record a failed request without its input or its token.
+        Build a sanitized diagnostic for a failed request.
 
-        The status is worth its own line even though the user is never
-        told it apart: 401 is a token to replace, 403 a plan that does
-        not cover the model, 429 a rate limit or an exhausted
-        allowance, and only the log can say which happened.
+        The status is worth carrying even though the user is never told
+        it apart: 401 is a token to replace, 403 a plan that does not
+        cover the model, 429 a rate limit or an exhausted allowance, and
+        only the diagnostic can say which happened.
 
         The elapsed seconds sit next to the limit for the same reason.
         A timeout that fired at the limit is an endpoint slower than
@@ -192,14 +186,15 @@ class OpenAICompatibleProvider:
         one that fired well short of it is a connection lost on the
         way, and raising the limit would change nothing.
 
-        Record the exception class but not its message. An SDK may put
+        Carry the exception class but not its message. An SDK may put
         the upstream response body into an exception message, and that
-        body can contain text that must stay out of the log.
+        body can contain text that must stay out of the diagnostic.
         """
-        logger.error(
-            "generation failure: request_id=%s backend=%s endpoint_host=%s "
-            "model=%s error=%s status=%s upstream_request_id=%s elapsed=%s "
-            "timeout=%s",
+        return (
+            "generation failure: request_id={0} backend={1} "
+            "endpoint_host={2} model={3} error={4} status={5} "
+            "upstream_request_id={6} elapsed={7} timeout={8}"
+        ).format(
             request_id or "-",
             config.generation_backend,
             config.endpoint_host,
@@ -225,21 +220,31 @@ class OpenAICompatibleProvider:
         """ Read the answer into the shape generator.py works with. """
         choices = getattr(response, "choices", None)
         if not choices:
-            logger.error("The answer carries no choice")
-            raise InvalidResponseError()
+            raise InvalidResponseError("answer carries no choice")
 
         choice = choices[0]
-        finish_reason = getattr(choice, "finish_reason", None) or ""
+
+        # A response is accepted only where the endpoint says how the
+        # generation ended. A missing or blank finish reason is refused
+        # rather than assumed to mean an ordinary stop: an endpoint
+        # that leaves this out has told us nothing about whether the
+        # answer is complete. An unknown but non-empty reason is not
+        # guessed at either; it is kept, on the chance that a
+        # compatible endpoint uses a name of its own for an ordinary
+        # stop.
+        raw_finish_reason = getattr(choice, "finish_reason", None)
+        if not isinstance(raw_finish_reason, str) or not raw_finish_reason.strip():
+            raise InvalidResponseError("answer carries no usable finish reason")
+        finish_reason = raw_finish_reason.strip()
+
         if finish_reason in TRUNCATED_REASONS:
-            logger.error(
-                "The output was cut off (finish_reason=%s); raise "
-                "MAX_OUTPUT_TOKENS", finish_reason)
-            raise InvalidResponseError()
+            raise InvalidResponseError(
+                "output was cut off (finish_reason={0}); raise "
+                "MAX_OUTPUT_TOKENS".format(finish_reason))
 
         content = getattr(getattr(choice, "message", None), "content", None)
         if not isinstance(content, str) or not content.strip():
-            logger.error("The answer carries no usable content")
-            raise InvalidResponseError()
+            raise InvalidResponseError("answer carries no usable content")
 
         usage = getattr(response, "usage", None)
         return CompletionResult(

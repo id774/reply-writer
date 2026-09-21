@@ -26,6 +26,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Separated safe internal diagnostics from user-facing error text.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -33,10 +35,22 @@
 
 
 class ReplyWriterError(Exception):
-    """ Base of every error the user is allowed to see. """
+    """
+    Base of every error the user is allowed to see.
+
+    diagnostic carries a sanitized, internal-only description of what
+    went wrong. It is set by the layer that detected the failure and
+    read only by the entry point that owns the failure log, so a cause
+    is recorded once, in one place, and never in the text shown to the
+    person.
+    """
 
     user_message = "The request could not be completed."
     status_code = 500
+
+    def __init__(self, diagnostic: str = "") -> None:
+        self.diagnostic = diagnostic
+        super().__init__(self.user_message)
 
 
 class EmptyInputError(ReplyWriterError):
@@ -55,7 +69,9 @@ class InputTooLongError(ReplyWriterError):
         self.user_message = (
             "The message is too long. Keep it within {0} characters, or "
             "paste the part you are replying to.".format(limit))
-        super().__init__(self.user_message)
+        # No diagnostic: the dynamic user_message is not the internal
+        # cause, and passing it as one would blur the two apart.
+        super().__init__()
 
 
 class DirectionTooLongError(ReplyWriterError):
@@ -67,7 +83,9 @@ class DirectionTooLongError(ReplyWriterError):
         self.user_message = (
             "The direction is too long. Keep it within {0} "
             "characters.".format(limit))
-        super().__init__(self.user_message)
+        # No diagnostic: the dynamic user_message is not the internal
+        # cause, and passing it as one would blur the two apart.
+        super().__init__()
 
 
 class UpstreamConnectionError(ReplyWriterError):

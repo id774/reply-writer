@@ -39,7 +39,7 @@
 #
 #  Usage:
 #      python app.py
-#      gunicorn app:app --bind 127.0.0.1:${PORT} --timeout 240
+#      gunicorn app:app --bind 127.0.0.1:${PORT:-8091} --timeout 240
 #
 #  Options:
 #  - None. Every setting comes from the environment or .env, through
@@ -50,12 +50,15 @@
 #  - Flask 3.x
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Centralized sanitized failure diagnostics at the Web entry point.
 #  v1.0 2026-08-10
 #       Initial release.
 #
 ########################################################################
 
 import logging
+import traceback
 
 from flask import Flask, g, render_template, request
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
@@ -154,12 +157,20 @@ def healthz():
 
 @app.errorhandler(ReplyWriterError)
 def handle_known_error(error: ReplyWriterError):
-    """ Show the message meant for the user and log the cause. """
+    """
+    Show the message meant for the user and log the cause.
+
+    This is the one place a ReplyWriterError is logged. Every layer
+    below it raises with a sanitized diagnostic instead of logging and
+    re-raising, so a single failure produces a single log line rather
+    than one per layer it passed through.
+    """
     request_id = _request_id()
     # An input the person can correct is not a failure of the server.
     level = logging.INFO if error.status_code == 400 else logging.ERROR
+    detail = error.diagnostic or error.user_message
     logger.log(level, "%s (request %s): %s", type(error).__name__, request_id,
-               error)
+               detail)
 
     # A refusal the person can act on returns them to the input screen
     # with what they typed still there. Anything else is not theirs to
@@ -222,12 +233,27 @@ def handle_http_error(error: HTTPException):
     return page, error.code
 
 
+def _unexpected_diagnostic(error: Exception) -> str:
+    """
+    Build a sanitized diagnostic for an unexpected exception.
+
+    The exception class and the traceback's stack frames are useful for
+    finding a fault; the exception's own message is not carried, since
+    it may hold text that must stay out of the log. The frames are
+    joined onto one line, so the whole diagnostic reads as a single
+    logging call.
+    """
+    frames = "".join(traceback.format_tb(error.__traceback__))
+    stack = " ".join(frames.split())
+    if stack:
+        return "{0}: {1}".format(type(error).__name__, stack)
+    return type(error).__name__
+
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(error: Exception):
     """ Report an unexpected failure without exposing its detail. """
-    logger.exception("Unexpected failure (request %s): %s", _request_id(),
-                     type(error).__name__)
-    return handle_known_error(InternalError())
+    return handle_known_error(InternalError(_unexpected_diagnostic(error)))
 
 
 if __name__ == "__main__":

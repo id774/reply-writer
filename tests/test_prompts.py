@@ -47,7 +47,11 @@
 #    - Read a prompt file and strip its surrounding whitespace.
 #    - Refuse a prompt file that is missing.
 #    - Refuse a prompt file that is empty or only whitespace.
-#    - Keep the file name out of what the user is shown.
+#    - Refuse a prompt file whose bytes are not valid UTF-8, without
+#      carrying the invalid byte or the source text in the diagnostic.
+#    - Keep the file name out of what the user is shown, and carry it
+#      in the diagnostic instead of logging it at this layer.
+#    - Log no failure at this layer; the entry point owns that log.
 #    - Refuse a user prompt missing {{message}} or {{direction}}.
 #    - Refuse a user prompt carrying either one more than once.
 #    - Refuse a user prompt carrying an unknown placeholder.
@@ -66,7 +70,7 @@
 #    - Keep boundary-looking text inside the message it arrived in.
 #    - Keep boundary-looking text inside the direction it arrived in.
 #    - Refuse a generation once every local boundary attempt has collided,
-#      logging neither the message nor the direction.
+#      carrying neither the message nor the direction in the diagnostic.
 #    - Refuse multiline unknown placeholders in user.md and system.md.
 #    - Keep missing information from authorizing an unprovided future undertaking.
 #
@@ -75,11 +79,15 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Covered non-UTF-8 prompts and the move from library logging to
+#       sanitized InternalError diagnostics.
 #  v1.0 2026-08-10
 #       Initial release.
 #
 ########################################################################
 
+import logging
 import os
 import tempfile
 import unittest
@@ -153,27 +161,53 @@ class LoadPromptTest(unittest.TestCase):
 
     def test_refuses_a_missing_prompt(self):
         """ Refuse a prompt file that is not there. """
-        with self.assertLogs("reply_writer.prompts", "ERROR"):
-            with self.assertRaises(InternalError):
-                load_prompt("absent.md", self.prompts.path)
+        with self.assertRaises(InternalError) as raised:
+            load_prompt("absent.md", self.prompts.path)
+        self.assertIn("prompt file missing", raised.exception.diagnostic)
 
     def test_refuses_an_empty_prompt(self):
         """ Refuse an empty prompt rather than generate without one. """
         self.prompts.write("system.md", "   \n\n")
-        with self.assertLogs("reply_writer.prompts", "ERROR"):
-            with self.assertRaises(InternalError):
-                load_prompt("system.md", self.prompts.path)
+        with self.assertRaises(InternalError) as raised:
+            load_prompt("system.md", self.prompts.path)
+        self.assertIn("prompt file empty", raised.exception.diagnostic)
+
+    def test_refuses_a_prompt_that_is_not_valid_utf8(self):
+        """ Refuse a prompt file whose bytes are not valid UTF-8. """
+        path = os.path.join(self.prompts.path, "system.md")
+        with open(path, "wb") as handle:
+            handle.write(b"\xff\xfeInvented prompt text.")
+        with self.assertRaises(InternalError) as raised:
+            load_prompt("system.md", self.prompts.path)
+        self.assertIn("not valid UTF-8", raised.exception.diagnostic)
+        self.assertIn(path, raised.exception.diagnostic)
+        # Neither the invalid byte nor any source text belongs in a
+        # diagnostic: only that the file was not UTF-8, and which file.
+        self.assertNotIn("Invented prompt text", raised.exception.diagnostic)
 
     def test_keeps_the_path_out_of_the_user_message(self):
-        """ Keep an internal path off the screen, and in the log only. """
-        with self.assertLogs("reply_writer.prompts", "ERROR") as recorded:
-            try:
+        """ Keep an internal path off the screen, and in the diagnostic. """
+        try:
+            load_prompt("absent.md", self.prompts.path)
+        except ReplyWriterError as error:
+            self.assertNotIn(self.prompts.path, error.user_message)
+            self.assertIn(self.prompts.path, error.diagnostic)
+        else:
+            self.fail("a missing prompt was not refused")
+
+    def test_a_refused_prompt_logs_nothing_at_this_layer(self):
+        """
+        Log no failure here: the entry point owns that log.
+
+        This layer raises InternalError with a sanitized diagnostic
+        instead of logging and re-raising, so that a failure produces
+        one log line at the entry point rather than one per layer.
+        """
+        prompts_logger = logging.getLogger("reply_writer.prompts")
+        with mock.patch.object(prompts_logger, "error") as error_log:
+            with self.assertRaises(InternalError):
                 load_prompt("absent.md", self.prompts.path)
-            except ReplyWriterError as error:
-                self.assertNotIn(self.prompts.path, error.user_message)
-            else:
-                self.fail("a missing prompt was not refused")
-        self.assertIn(self.prompts.path, "\n".join(recorded.output))
+        error_log.assert_not_called()
 
 
 class BuildReplyMessagesTest(unittest.TestCase):
@@ -299,13 +333,11 @@ class BuildReplyMessagesTest(unittest.TestCase):
         with mock.patch(
                 "reply_writer.prompts.secrets.token_hex",
                 return_value=COLLIDING_BOUNDARY_ID) as token_hex:
-            with self.assertLogs("reply_writer.prompts", "ERROR") as recorded:
-                with self.assertRaises(InternalError):
-                    build_reply_messages(message, DIRECTION, self.prompts.path)
+            with self.assertRaises(InternalError) as raised:
+                build_reply_messages(message, DIRECTION, self.prompts.path)
         self.assertEqual(token_hex.call_count, 32)
-        logged = "\n".join(recorded.output)
-        self.assertNotIn(message, logged)
-        self.assertNotIn(DIRECTION, logged)
+        self.assertNotIn(message, raised.exception.diagnostic)
+        self.assertNotIn(DIRECTION, raised.exception.diagnostic)
 
 
 class UserPromptContractTest(unittest.TestCase):
@@ -318,9 +350,8 @@ class UserPromptContractTest(unittest.TestCase):
     def refuse(self, user):
         """ Write user.md with the given text and assert it is refused. """
         self.prompts.write("user.md", user)
-        with self.assertLogs("reply_writer.prompts", "ERROR"):
-            with self.assertRaises(InternalError):
-                load_prompt("user.md", self.prompts.path)
+        with self.assertRaises(InternalError):
+            load_prompt("user.md", self.prompts.path)
 
     def test_refuses_a_user_prompt_missing_the_message_placeholder(self):
         """ Refuse a user prompt that never places the message. """
@@ -350,14 +381,13 @@ class UserPromptContractTest(unittest.TestCase):
     def test_keeps_the_path_out_of_the_user_message(self):
         """ Keep an internal path off the screen on a bad contract too. """
         self.prompts.write("user.md", "M:{{message}}")
-        with self.assertLogs("reply_writer.prompts", "ERROR") as recorded:
-            try:
-                load_prompt("user.md", self.prompts.path)
-            except ReplyWriterError as error:
-                self.assertNotIn(self.prompts.path, error.user_message)
-            else:
-                self.fail("a malformed user prompt was not refused")
-        self.assertIn(self.prompts.path, "\n".join(recorded.output))
+        try:
+            load_prompt("user.md", self.prompts.path)
+        except ReplyWriterError as error:
+            self.assertNotIn(self.prompts.path, error.user_message)
+            self.assertIn(self.prompts.path, error.diagnostic)
+        else:
+            self.fail("a malformed user prompt was not refused")
 
 
 class SystemPromptContractTest(unittest.TestCase):
@@ -370,9 +400,8 @@ class SystemPromptContractTest(unittest.TestCase):
     def refuse(self, system):
         """ Write system.md with the given text and assert it is refused. """
         self.prompts.write("system.md", system)
-        with self.assertLogs("reply_writer.prompts", "ERROR"):
-            with self.assertRaises(InternalError):
-                load_prompt("system.md", self.prompts.path)
+        with self.assertRaises(InternalError):
+            load_prompt("system.md", self.prompts.path)
 
     def test_refuses_a_system_prompt_with_the_message_placeholder(self):
         """ Refuse a system prompt that carries {{message}}. """

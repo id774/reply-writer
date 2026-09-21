@@ -40,6 +40,8 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.4 2026-09-21
+#       Refused non-UTF-8 prompts and carried sanitized prompt diagnostics.
 #  v1.3 2026-09-12
 #       Refused multiline double-brace placeholders in prompt sources.
 #  v1.2 2026-09-09
@@ -52,15 +54,12 @@
 #
 ########################################################################
 
-import logging
 import os
 import re
 import secrets
 from typing import Dict, List
 
 from reply_writer.errors import InternalError
-
-logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = "system.md"
 USER_PROMPT = "user.md"
@@ -97,7 +96,6 @@ def _validate_prompt_contract(name: str, path: str, text: str) -> None:
 
     if name == SYSTEM_PROMPT:
         if found:
-            logger.error("The prompt file %s carries a placeholder", path)
             raise InternalError(
                 "prompt file carries a placeholder: {0}".format(path))
         return
@@ -108,15 +106,10 @@ def _validate_prompt_contract(name: str, path: str, text: str) -> None:
 
     for placeholder in REQUIRED_USER_PLACEHOLDERS:
         if counts.pop(placeholder, 0) != 1:
-            logger.error(
-                "The prompt file %s does not carry %s exactly once",
-                path, placeholder)
             raise InternalError(
                 "prompt file placeholder count invalid: {0}".format(path))
 
     if counts:
-        logger.error("The prompt file %s carries an unknown placeholder",
-                     path)
         raise InternalError(
             "prompt file carries an unknown placeholder: {0}".format(path))
 
@@ -135,8 +128,6 @@ def _new_boundary_id(*texts: str) -> str:
         if all(candidate not in text for text in texts):
             return candidate
 
-    logger.error(
-        "Could not create a prompt boundary without an input collision")
     raise InternalError("prompt boundary collision")
 
 
@@ -154,15 +145,23 @@ def load_prompt(name: str, prompt_dir: str) -> str:
     try:
         with open(path, encoding="utf-8") as handle:
             text = handle.read().strip()
-    except OSError as error:
-        logger.error("Cannot read the prompt file %s: %s", path, error)
-        raise InternalError("prompt file missing: {0}".format(path))
+    except FileNotFoundError:
+        raise InternalError(
+            "prompt file missing: {0}".format(path)) from None
+    except UnicodeDecodeError:
+        # Neither the invalid byte nor the source text belongs in a
+        # diagnostic: what is useful is that the file is not UTF-8, and
+        # which file it was.
+        raise InternalError(
+            "prompt file is not valid UTF-8: {0}".format(path)) from None
+    except OSError:
+        raise InternalError(
+            "cannot read prompt file: {0}".format(path)) from None
 
     # An empty prompt file is refused rather than sent. A reply written
     # without the writing policy would look like any other reply, and
     # nothing downstream could tell that the policy never arrived.
     if not text:
-        logger.error("The prompt file %s is empty", path)
         raise InternalError("prompt file empty: {0}".format(path))
 
     _validate_prompt_contract(name, path, text)

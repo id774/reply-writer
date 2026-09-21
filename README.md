@@ -123,11 +123,11 @@ Every setting is read from the environment, or from a `.env` file beside the app
 | `GENERATION_TEMPERATURE` | no | unset | Sent only when set. |
 | `GENERATION_OUTPUT_TOKEN_PARAMETER` | no | `max_tokens` | Request field that carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens`. |
 | `MAX_OUTPUT_TOKENS` | no | `2000` | Upper bound of one response. |
-| `MAX_INPUT_CHARS` | no | `8000` | Upper bound of the received message in characters. Web request bodies are separately capped at 1 MiB. |
-| `MAX_POLICY_CHARS` | no | `2000` | Upper bound of the direction. |
+| `MAX_INPUT_CHARS` | no | `8000` | Upper bound of the received message, counted as a browser textarea's `value.length` would count it. Web request bodies are separately capped at 1 MiB. |
+| `MAX_POLICY_CHARS` | no | `2000` | Upper bound of the direction, counted the same way as `MAX_INPUT_CHARS`. |
 | `PROMPT_DIR` | no | `prompts` | Directory holding the prompt files. |
 | `LOG_LEVEL` | no | `INFO` | Level of the application log. An unknown name uses `INFO`. |
-| `PORT` | no | `8091` | Port of the Flask development server and the Procfile gunicorn command. The systemd example binds explicitly to `8091`. |
+| `PORT` | no | `8091` | Port of the Flask development server and the Procfile gunicorn command; the Procfile falls back to `8091` when `PORT` is unset. The systemd example binds explicitly to `8091`. |
 
 ### Choosing an endpoint
 
@@ -141,8 +141,10 @@ value. Accepted backend values are defined in `config.py` and documented in
 the Configuration table. `GENERATION_BASE_URL` must be an absolute HTTPS URL
 with a valid host and optional TCP port. A URL that uses plain `http`, has no
 host, has a malformed or invalid port, carries user information, a query or a
-fragment, or already ends in `/chat/completions` is refused before generation:
-the SDK appends the resource path itself.
+fragment, already ends in `/chat/completions`, or carries whitespace anywhere
+in it — not only inside the host — is refused before generation: the SDK
+appends the resource path itself, and a URL an SDK would otherwise send with
+embedded whitespace is not rewritten or trimmed, only refused.
 
 ### Choosing the output-token field
 
@@ -210,6 +212,8 @@ The answer is one JSON object, so that the subject and the body arrive as separa
 
 Neither mode falls back to the other. A configured mode that the endpoint does not support is an error, because retrying under the other would spend a second request nobody asked for.
 
+A response is accepted only where the endpoint reports a usable, non-empty `finish_reason`. A missing or blank one is refused rather than read as an ordinary stop, because an endpoint that leaves it out has said nothing about whether the answer is complete. `length` and `max_tokens` are refused as a truncated answer, as before; any other non-empty reason is accepted and carried through as the endpoint reported it, rather than guessed to mean a truncation.
+
 ### Timeouts that agree with each other
 
 ```text
@@ -261,6 +265,8 @@ python cli.py --version
 
 The message and the direction are read from a file or from standard input, never from an argument. `-` may select standard input for either one, but not for both in the same invocation: the CLI has one input stream and no framing that could split it into two values. There is no option for the API token or the base URL, because a command line is readable by every user of the host.
 
+A message or direction file that is not valid UTF-8 is refused before the generation core is reached, with a sentence naming the problem and no traceback; the invalid byte and the file's contents stay out of the log, the same way the prompt files are refused rather than decoded with replacement characters.
+
 `--model`, `--prompt-dir` and `--timeout` each replace the setting they name, for one run. An option left out changes nothing; an explicit value is held to the same whitespace and unset rule the setting follows when it comes from the environment, rather than to a looser rule of its own. A blank or whitespace-only `--model` is unset, so a missing `GENERATION_MODEL` stays missing and the command is refused before any request is made. A blank or whitespace-only `--prompt-dir` is unset as well, so it falls back to the default `prompts` even where the environment names a different directory.
 
 | Exit code | Meaning |
@@ -295,6 +301,8 @@ The screen shows a sentence the person can act on, and on a failure that is not 
 The log carries the other half: the request id, the backend, the host of the endpoint, the model, the HTTP status, the finish reason, the token counts, the elapsed seconds beside the limit, and the class of the error. A person reporting a fault quotes the request id, and the log is read at that id.
 
 What the log never carries, at any level, is the received message, the direction, the assembled prompts, the generated reply, the body of the API response, the API token or the `Authorization` header. Raising `LOG_LEVEL` reveals none of it, and there is no setting that turns it back on.
+
+Each failure is logged once. The provider, the generation core and the prompt layer raise an error carrying a sanitized internal diagnostic instead of logging it themselves; app.py and cli.py are the only places that write it to the log, so a single failure never produces one log line per layer it passed through. An unexpected exception is logged the same way: the exception's class name and its traceback's stack frames are recorded, and its own message text is not, so that text raised from deep inside a dependency cannot put something private into the log by accident.
 
 ## Tests
 
