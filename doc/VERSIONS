@@ -1,8 +1,8 @@
 reply-writer Repository Version History
 =======================================
 
-v1.0.2 (Release Date: TBD)
---------------------------
+v1.0.2 (2026-09-21)
+-------------------
 - Align CLI overrides with config.py's normalization: fix --model/--prompt-dir
   blank handling and move --timeout's validity check into config.py.
 - Validate prompt sets before generation, including multiline double-brace
