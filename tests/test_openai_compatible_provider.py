@@ -71,6 +71,8 @@
 #    - Keep the token and the reply out of a failure diagnostic.
 #    - Log no failure at this layer; the entry point owns that log, and
 #      the success path's response log is unaffected.
+#    - Raise InternalError for an unknown backend in build_provider(),
+#      without logging at the provider-registry layer either.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -78,8 +80,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Covered the required finish reason, sanitized failure diagnostics and
-#       refusal of unknown response modes before a request.
+#       Covered finish-reason validation, sanitized diagnostics and single-owner
+#       failure logging across provider selection and generation.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -95,10 +97,12 @@ from config import Config
 from reply_writer.errors import (InternalError, InvalidResponseError,
                                  UpstreamConnectionError, UpstreamStatusError,
                                  UpstreamTimeoutError)
+from reply_writer.providers import build_provider
 from reply_writer.providers.openai_compatible import OpenAICompatibleProvider
 
 PROVIDER_LOGGER = logging.getLogger(
     "reply_writer.providers.openai_compatible")
+REGISTRY_LOGGER = logging.getLogger("reply_writer.providers")
 
 TOKEN = "00000000-0000-0000-0000-000000000000:secret-value"
 
@@ -549,6 +553,29 @@ class LogTest(ProviderTestCase):
         with mock.patch.object(PROVIDER_LOGGER, "error") as error_log:
             with self.assertRaises(UpstreamConnectionError):
                 self.complete(FakeSDK(error=FakeConnectionError("unreachable")))
+        error_log.assert_not_called()
+
+
+class ProviderSelectionTest(unittest.TestCase):
+    """
+    Cover build_provider(), which chooses the provider by backend name.
+
+    An unknown backend is an internal invariant failure rather than an
+    ordinary configuration error: validate_generation_config() already
+    refuses it earlier, in the normal environment path. This covers the
+    registry's own local guard for a hand-built Config that reaches it
+    unvalidated, and pins that the failure is raised rather than logged
+    here, so the entry point that receives it remains the single owner
+    of the failure log.
+    """
+
+    def test_unknown_backend_raises_without_logging_at_provider_layer(self):
+        """ Raise InternalError for an unknown backend, and log nothing. """
+        with mock.patch.object(REGISTRY_LOGGER, "error") as error_log:
+            with self.assertRaises(InternalError) as raised:
+                build_provider(config(generation_backend="unknown-backend"))
+        self.assertEqual(raised.exception.diagnostic,
+                         "unknown generation backend")
         error_log.assert_not_called()
 
 
