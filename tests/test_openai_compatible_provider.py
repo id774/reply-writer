@@ -45,6 +45,8 @@
 #    - Send it as max_completion_tokens through extra_body when configured.
 #    - Ask for a JSON object under json-object mode.
 #    - Send no response format under prompt-json mode.
+#    - Refuse a hand-built Config carrying an unknown response mode before
+#      a request is spent.
 #    - Send no temperature unless it is set, and send it when it is.
 #    - Never stream.
 #    - Normalize a well formed answer, including the usage counters.
@@ -76,8 +78,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Covered the required finish reason and the move from library
-#       logging to sanitized failure diagnostics.
+#       Covered the required finish reason, sanitized failure diagnostics and
+#       refusal of unknown response modes before a request.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -296,6 +298,24 @@ class RequestTest(ProviderTestCase):
         """ Leave the contract to the prompt in that mode. """
         self.complete(settings=config(generation_response_mode="prompt-json"))
         self.assertNotIn("response_format", self.sdk.request)
+
+    def test_refuses_an_unknown_response_mode_before_a_request(self):
+        """
+        Refuse a hand-built Config before spending a request on it.
+
+        load_config() already refuses an unknown GENERATION_RESPONSE_MODE;
+        this guards a Config built by hand from being read as prompt-json
+        by default instead of being refused the same way the unknown
+        output-token parameter is.
+        """
+        with mock.patch.object(PROVIDER_LOGGER, "error") as error_log:
+            with self.assertRaises(InternalError) as raised:
+                self.complete(settings=config(
+                    generation_response_mode="automatic"))
+        self.assertIsNone(self.sdk.request)
+        error_log.assert_not_called()
+        self.assertIn("unknown response mode: automatic",
+                      raised.exception.diagnostic)
 
     def test_sends_a_temperature_only_when_it_is_set(self):
         """ Keep the endpoint default unless a temperature was chosen. """

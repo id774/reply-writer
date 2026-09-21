@@ -34,7 +34,8 @@
 #
 #  Version History:
 #  v1.2 2026-09-21
-#       Required a usable finish reason and carried sanitized failure diagnostics.
+#       Required a usable finish reason, carried sanitized failure diagnostics
+#       and refused unknown response modes before a request.
 #  v1.1 2026-09-12
 #       Selected max_tokens or max_completion_tokens from configuration.
 #  v1.0 2026-08-10
@@ -131,9 +132,18 @@ class OpenAICompatibleProvider:
         # an endpoint that rejects the parameter. Neither mode is tried
         # after the other: a configured mode that is unavailable is an
         # error, and retrying with the other would spend a second
-        # request the person never asked for.
+        # request the person never asked for. The else branch is not
+        # reachable through load_config(), which already refuses any
+        # other value; it guards a Config built by hand from being read
+        # as prompt-json by default instead of being refused.
         if config.generation_response_mode == "json-object":
             request["response_format"] = {"type": "json_object"}
+        elif config.generation_response_mode == "prompt-json":
+            pass
+        else:
+            raise InternalError(
+                "unknown response mode: {0}".format(
+                    config.generation_response_mode))
 
         return request
 
