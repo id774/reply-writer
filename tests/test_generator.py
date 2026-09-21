@@ -59,12 +59,21 @@
 #    - Let an upstream failure through unchanged.
 #    - Import the whole core with no web framework available.
 #    - Write no message, direction or reply to the log.
+#    - Count a supplementary character as two, in the message and the
+#      direction, matching a browser textarea's value.length.
+#    - Count CRLF and a lone CR each as the one LF a textarea normalizes
+#      a line ending to.
+#    - Carry a sanitized diagnostic on a refused answer instead of
+#      logging it, and keep the answer itself out of that diagnostic.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only (the provider is stubbed, the SDK unused)
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Covered textarea-equivalent length limits and safe invalid-answer
+#       diagnostics in place of a library-layer log.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -83,7 +92,7 @@ from config import Config
 from reply_writer.errors import (DirectionTooLongError, EmptyInputError,
                                  InputTooLongError, InternalError,
                                  InvalidResponseError, UpstreamTimeoutError)
-from reply_writer.generator import generate_reply
+from reply_writer.generator import generate_reply, validate_input
 from reply_writer.providers import CompletionResult
 
 # Invented material. No real correspondence is used as test data.
@@ -207,6 +216,63 @@ class InputValidationTest(GeneratorTestCase):
         self.assertEqual(provider.calls, [])
 
 
+class TextareaLengthTest(unittest.TestCase):
+    """
+    Cover the browser-textarea length the limits are enforced through.
+
+    A browser counts value.length in UTF-16 code units: a character
+    above the Basic Multilingual Plane counts as the two code units of
+    its surrogate pair, and every line ending a textarea can hold, CRLF
+    included, normalizes to the one LF it counts as one of. The server
+    side limit has to agree with what the person watching the counter
+    on the screen sees, or a message the counter accepted could still
+    be refused once it reaches the server. validate_input() is
+    exercised directly, so these cases pin the count on its own,
+    without depending on a provider or a prompt directory.
+    """
+
+    def config(self, **overrides):
+        """ Return a configuration usable by validate_input() alone. """
+        values = {"max_input_chars": 8000, "max_policy_chars": 2000}
+        values.update(overrides)
+        return Config(**values)
+
+    def test_a_supplementary_character_counts_as_two(self):
+        """ Count one character above the BMP as two, as value.length does. """
+        # U+1F600, one Unicode character represented in JavaScript as a
+        # two-unit surrogate pair.
+        message = "😀"
+        validate_input(message, "", self.config(max_input_chars=2))
+        with self.assertRaises(InputTooLongError):
+            validate_input(message, "", self.config(max_input_chars=1))
+
+    def test_a_supplementary_character_in_the_direction_counts_as_two(self):
+        """ Apply the same surrogate-pair count to the direction field. """
+        direction = "😀"
+        validate_input(MESSAGE, direction, self.config(max_policy_chars=2))
+        with self.assertRaises(DirectionTooLongError):
+            validate_input(MESSAGE, direction,
+                           self.config(max_policy_chars=1))
+
+    def test_a_crlf_line_ending_counts_as_one_character(self):
+        """ Count CRLF as the one LF a textarea normalizes it to. """
+        validate_input("a\r\nb", "", self.config(max_input_chars=3))
+        with self.assertRaises(InputTooLongError):
+            validate_input("a\r\nb", "", self.config(max_input_chars=2))
+
+    def test_a_lone_cr_line_ending_counts_as_one_character(self):
+        """ Count a lone CR as the one LF a textarea normalizes it to. """
+        validate_input("a\rb", "", self.config(max_input_chars=3))
+        with self.assertRaises(InputTooLongError):
+            validate_input("a\rb", "", self.config(max_input_chars=2))
+
+    def test_ordinary_ascii_and_japanese_text_is_unaffected(self):
+        """ Count an ordinary BMP character once, as before this change. """
+        validate_input("あ" * 20, "", self.config(max_input_chars=20))
+        with self.assertRaises(InputTooLongError):
+            validate_input("あ" * 21, "", self.config(max_input_chars=20))
+
+
 class GenerationTest(GeneratorTestCase):
     """ Cover one generation from the input to the draft. """
 
@@ -298,36 +364,50 @@ class GenerationTest(GeneratorTestCase):
 class InvalidAnswerTest(GeneratorTestCase):
     """ Cover the refusal of an answer that did not keep the contract. """
 
-    def refuse(self, content, **overrides):
-        """ Assert that the given answer is refused, and log the reason. """
-        with self.assertLogs("reply_writer.generator", "ERROR"):
-            with self.assertRaises(InvalidResponseError):
-                self.generate(content, **overrides)
+    def refuse(self, content, diagnostic, **overrides):
+        """
+        Assert that the given answer is refused, with a safe diagnostic.
+
+        The generator no longer logs the refusal itself: it raises
+        InvalidResponseError carrying a sanitized diagnostic, and the
+        entry point that owns the failure log is the one that records
+        it. This asserts the diagnostic is the expected one and that it
+        never carries the answer that was refused.
+        """
+        with self.assertRaises(InvalidResponseError) as raised:
+            self.generate(content, **overrides)
+        self.assertIn(diagnostic, raised.exception.diagnostic)
+        self.assertNotIn(REPLY, raised.exception.diagnostic)
+        return raised.exception
 
     def test_refuses_an_answer_that_is_not_json(self):
         """ Refuse prose where an object was asked for. """
-        self.refuse("ご連絡ありがとうございます。")
+        self.refuse("ご連絡ありがとうございます。",
+                    "answer is not readable as JSON")
 
     def test_refuses_json_that_is_not_an_object(self):
         """ Refuse a list or a bare string. """
-        self.refuse('["a", "b"]')
-        self.refuse('"a reply"')
+        self.refuse('["a", "b"]', "answer is JSON but not an object")
+        self.refuse('"a reply"', "answer is JSON but not an object")
 
     def test_refuses_an_answer_with_no_body(self):
         """ Refuse an answer missing the one required field. """
-        self.refuse(self.answer(subject=SUBJECT))
+        self.refuse(self.answer(subject=SUBJECT), "answer has no usable body")
 
     def test_refuses_a_blank_body(self):
         """ Refuse a body that carries no reply. """
-        self.refuse(self.answer(subject=None, body="   "))
+        self.refuse(self.answer(subject=None, body="   "),
+                    "answer has no usable body")
 
     def test_refuses_a_body_that_is_not_a_string(self):
         """ Refuse a body of the wrong type rather than coerce it. """
-        self.refuse(self.answer(subject=None, body=["a"]))
+        self.refuse(self.answer(subject=None, body=["a"]),
+                    "answer has no usable body")
 
     def test_refuses_a_subject_that_is_neither_a_string_nor_null(self):
         """ Refuse a subject of the wrong type rather than coerce it. """
-        self.refuse(self.answer(subject=["Re:"], body=REPLY))
+        self.refuse(self.answer(subject=["Re:"], body=REPLY),
+                    "answer subject is not a string or null")
 
     def test_unwraps_a_fenced_object_under_prompt_json(self):
         """ Accept a whole answer wrapped in one fence in that mode. """
@@ -361,7 +441,8 @@ class InvalidAnswerTest(GeneratorTestCase):
         draft on the screen reads as a fault of the screen, so the
         answer is refused instead.
         """
-        self.refuse(self.answer(subject=None, body="```\n```"))
+        self.refuse(self.answer(subject=None, body="```\n```"),
+                    "answer carries no body outside its markup")
 
     def test_refuses_an_object_buried_in_prose(self):
         """
@@ -373,7 +454,7 @@ class InvalidAnswerTest(GeneratorTestCase):
         reading past the explanation would hide that.
         """
         self.refuse("Here is the reply:\n{0}\nHope it helps.".format(
-            self.answer(body=REPLY)))
+            self.answer(body=REPLY)), "answer is not readable as JSON")
 
     def test_refuses_a_fenced_object_under_json_object_mode(self):
         """
@@ -385,7 +466,8 @@ class InvalidAnswerTest(GeneratorTestCase):
         the operator can fix.
         """
         fenced = "```json\n{0}\n```".format(self.answer(body=REPLY))
-        self.refuse(fenced, generation_response_mode="json-object")
+        self.refuse(fenced, "answer is not readable as JSON",
+                    generation_response_mode="json-object")
 
     def test_an_upstream_failure_passes_through(self):
         """ Let a provider failure travel to the caller unchanged. """
@@ -461,6 +543,11 @@ class LogPrivacyTest(GeneratorTestCase):
     def test_a_refused_answer_writes_no_text(self):
         """ Write none of it when the answer has to be refused either. """
         with self.assertLogs(logging.getLogger(), "DEBUG") as recorded:
+            # One line of its own, so that assertLogs has something to
+            # find: the generator itself no longer logs a refused
+            # answer, since it raises a sanitized diagnostic instead
+            # and leaves the log to the entry point that owns it.
+            logging.getLogger("tests").info("generating")
             with self.assertRaises(InvalidResponseError):
                 self.generate("ご連絡ありがとうございます。" + REPLY,
                               direction=DIRECTION)

@@ -53,7 +53,11 @@
 #    - Accept a base URL whose host is a bracketed IPv6 literal.
 #    - Refuse a base URL with no hostname, a malformed IPv6 authority, an
 #      invalid port, or whitespace in the hostname.
+#    - Refuse whitespace embedded anywhere in the base URL, including the
+#      path, a tab and a newline, while still accepting a valid IPv6
+#      base URL that carries none.
 #    - Refuse a missing model.
+#    - Pin the Procfile's fallback to the documented default port.
 #    - Keep the token out of every refusal message.
 #    - Trim a nonblank --model / --prompt-dir override, as the setting is.
 #    - Treat a blank or whitespace-only --model override as unset.
@@ -65,11 +69,15 @@
 #  - Standard library only
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Covered embedded-whitespace base URL refusal and the Procfile's
+#       documented port fallback.
 #  v1.0 2026-08-10
 #       Initial release.
 #
 ########################################################################
 
+import os
 import unittest
 from unittest import mock
 
@@ -356,6 +364,46 @@ class ValidateGenerationConfigTest(unittest.TestCase):
                 generation_base_url="https://api example.test/v1"))
         self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
 
+    def test_refuses_whitespace_embedded_in_the_base_url_path(self):
+        """
+        Refuse whitespace anywhere in the URL, not only in the hostname.
+
+        urlsplit() does not itself refuse a space in the path, and the
+        SDK would otherwise send the value as is.
+        """
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(usable_config(
+                generation_base_url="https://api.example.test/v 1"))
+        self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_refuses_a_tab_or_a_newline_embedded_in_the_base_url(self):
+        """ Refuse every kind of whitespace isspace() recognizes, not only a space. """
+        for url in ("https://api.example.test/v1\t",
+                    "https://api.example.test/v1\n",
+                    "https://api.example.test/\tv1"):
+            with self.assertRaises(ConfigError) as refusal:
+                validate_generation_config(
+                    usable_config(generation_base_url=url))
+            self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_accepts_an_ipv6_base_url_with_embedded_whitespace_refused(self):
+        """
+        Keep accepting a valid IPv6 base URL once whitespace is refused.
+
+        The whitespace check runs before the URL is parsed, so it must
+        not reject a base URL that carries none, including one whose
+        host is a bracketed IPv6 literal.
+        """
+        validate_generation_config(usable_config(
+            generation_base_url="https://[2001:db8::1]:443/v1"))
+
+    def test_no_refusal_of_embedded_whitespace_quotes_the_token(self):
+        """ Keep the token out of the message, even for this refusal. """
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(usable_config(
+                generation_base_url="https://api.example.test/v 1"))
+        self.assertNotIn(TOKEN, str(refusal.exception))
+
     def test_no_refusal_quotes_the_token(self):
         """ Keep the token out of every message, whatever was refused. """
         broken = (
@@ -369,6 +417,25 @@ class ValidateGenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ConfigError) as refusal:
                 validate_generation_config(config)
             self.assertNotIn(TOKEN, str(refusal.exception))
+
+
+class ProcfileTest(unittest.TestCase):
+    """
+    Cover the static contract of the repository's Procfile.
+
+    config.py documents PORT as defaulting to 8091, and the Procfile's
+    gunicorn command is expected to fall back to that same default when
+    PORT is unset rather than leaving the bind address without a port.
+    """
+
+    def test_procfile_falls_back_to_the_documented_default_port(self):
+        """ Bind to the documented default port when PORT is unset. """
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "Procfile")
+        with open(path, encoding="utf-8") as handle:
+            contents = handle.read()
+        self.assertIn("${PORT:-8091}", contents)
 
 
 class OverrideTest(unittest.TestCase):

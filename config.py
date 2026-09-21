@@ -85,6 +85,8 @@
 #      explicitly instead of reading this setting.
 #
 #  Version History:
+#  v1.4 2026-09-21
+#       Refused embedded whitespace anywhere in generation base URLs.
 #  v1.3 2026-09-12
 #       Added explicit selection of the output-token request parameter.
 #  v1.2 2026-09-09
@@ -323,6 +325,13 @@ def _validate_base_url(url: str) -> None:
     if not url:
         raise ConfigError("GENERATION_BASE_URL is required.")
 
+    # Checked against the whole URL, and before it is split apart, so
+    # that whitespace embedded anywhere in it is refused, not only
+    # inside the hostname: urlsplit() does not itself refuse a space in
+    # the path or elsewhere, and the SDK would otherwise send it as is.
+    if any(character.isspace() for character in url):
+        raise ConfigError(BASE_URL_SHAPE_ERROR)
+
     try:
         parts = urlsplit(url)
         hostname = parts.hostname
@@ -333,7 +342,6 @@ def _validate_base_url(url: str) -> None:
     if parts.scheme == "http":
         raise ConfigError("GENERATION_BASE_URL must use https.")
     if (parts.scheme != "https" or not parts.netloc or not hostname
-            or any(character.isspace() for character in hostname)
             or (port is not None and port < 1)):
         raise ConfigError(BASE_URL_SHAPE_ERROR)
     if "@" in parts.netloc:

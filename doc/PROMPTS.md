@@ -21,7 +21,7 @@ prompts/
 
 `PROMPT_DIR` names the directory. Pointing it elsewhere replaces the whole set, which is how a variant is tried without touching the one that is installed.
 
-Both files are required. One that is missing, unreadable or empty stops the generation before a request is spent, and the code ships no built-in text to fall back to: a reply written by a fallback prompt would be indistinguishable from one written by the intended prompt.
+Both files are required. One that is missing, unreadable for another reason, not valid UTF-8, empty or blank, or breaking the placeholder contract below, stops the generation before a request is spent, and the code ships no built-in text to fall back to: a reply written by a fallback prompt would be indistinguishable from one written by the intended prompt. A prompt file that is not valid UTF-8 is refused explicitly rather than decoded with replacement characters that would silently change what the model is told.
 
 ## Placeholders
 

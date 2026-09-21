@@ -304,7 +304,14 @@ An exception peculiar to an API library never propagates into the web layer. The
 - the generated result was invalid
 - any other internal error
 
-What may be shown to the person and what is recorded in the log are separate.
+What may be shown to the person and what is recorded in the log are separate:
+`user_message` is what the person is shown, and `diagnostic` is a sanitized,
+internal-only description of the cause. Every exception carries `diagnostic`
+as an ordinary attribute, defaulting to empty; a layer that detects a failure
+raises with a sanitized `diagnostic` instead of logging the failure itself,
+and only the entry point that owns the failure log — `app.py` or `cli.py` —
+writes it to the log. This is what keeps a single failure from being logged
+once per layer it passed through.
 
 ### 8.6 `reply_writer/prompts.py`
 
@@ -317,9 +324,14 @@ Reads the prompt files and assembles the messages the generation API is given. I
 - substituting the framed values into the prompt exactly once
 - building the messages for the API
 
-A prompt source that fails the placeholder check, or a request for which no
-collision-free boundary can be prepared, is refused before the generation API
-is called. The module performs no API call.
+A prompt source that is missing, that is not valid UTF-8, that cannot be read
+for another reason, that is empty, that fails the placeholder check, or a
+request for which no collision-free boundary can be prepared, is refused
+before the generation API is called. Each of these becomes an `InternalError`
+carrying a sanitized `diagnostic` — the path, and which of the above it was —
+rather than a log line written at this layer; a raw `UnicodeDecodeError`,
+the invalid byte, and the prompt source text itself never leave this module.
+The module performs no API call.
 
 ### 8.7 `reply_writer/generator.py`
 
@@ -334,6 +346,21 @@ The centre of the work. It:
 7. applies whatever mechanical post processing is needed
 
 It does not depend on Flask.
+
+`MAX_INPUT_CHARS` and `MAX_POLICY_CHARS` are enforced through a shared
+helper that counts a string the way a browser counts a textarea's
+`value.length`: CRLF and a lone CR each normalize to the one LF a textarea
+counts as one character, a character inside the Basic Multilingual Plane
+counts as one, and a character above it counts as the two UTF-16 code units
+of its surrogate pair. The same helper is used for the message and the
+direction, and for both the Web and the CLI entry point, so the limit the
+person sees on the screen and the one the server enforces never disagree.
+
+A response that fails validation — unreadable JSON, JSON that is not an
+object, a missing or malformed body, a malformed subject — raises
+`InvalidResponseError` carrying a sanitized `diagnostic` naming which of
+these it was, rather than logging the failure at this layer. The generated
+answer itself is never part of that diagnostic.
 
 ### 8.8 `reply_writer/formatter.py`
 
@@ -370,6 +397,27 @@ that wire field through the SDK's extra request body so the Python dependency
 can remain compatible with the repository's existing minimum version.
 A rejected field is an endpoint error; it is never retried under the other
 name.
+
+A response is accepted only where the endpoint reports a `finish_reason` that
+is a non-empty string once stripped. A missing value, an empty or
+whitespace-only one, or one that is not a string, is refused as an invalid
+response rather than read as an ordinary stop. `length` and `max_tokens`
+continue to be refused as a truncated answer. Any other non-empty reason is
+accepted and carried through as the endpoint reported it, trimmed of
+surrounding whitespace: an unrecognized reason is not assumed to mean a
+truncation, since a compatible endpoint may use a name of its own for an
+ordinary stop.
+
+This layer raises an SDK failure, an unknown output-token parameter, a
+missing `openai` package, or an invalid response, as one of
+`reply_writer.errors`'s classes carrying a sanitized `diagnostic` — the
+backend, the endpoint host, the model, the exception class, the HTTP status,
+the upstream request id, the elapsed seconds and the configured timeout,
+where they apply — rather than logging the failure itself. The upstream
+exception's own message, which an SDK may build from the response body, is
+never part of that diagnostic or of the mapped exception's chain: the mapped
+error is raised with `from None`. The success path is unaffected:
+`log_response()` still records the shape of an answer once it is accepted.
 
 ---
 
@@ -413,8 +461,8 @@ The settings live in the environment. At a minimum:
 | `GENERATION_TEMPERATURE` | an optional temperature |
 | `GENERATION_OUTPUT_TOKEN_PARAMETER` | which Chat Completions field carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens` |
 | `MAX_OUTPUT_TOKENS` | the output limit |
-| `MAX_INPUT_CHARS` | the generation-core character limit on the received message |
-| `MAX_POLICY_CHARS` | the limit on the direction |
+| `MAX_INPUT_CHARS` | the generation-core character limit on the received message, counted as a browser textarea's `value.length` would count it |
+| `MAX_POLICY_CHARS` | the limit on the direction, counted the same way |
 | `PROMPT_DIR` | where the prompts are |
 | `LOG_LEVEL` | the log level; an unknown name uses `INFO` |
 | `PORT` | the Flask development-server port and the port used by the Procfile gunicorn command |
@@ -433,7 +481,10 @@ The default of `PORT`:
 8091
 ```
 
-The checked-in systemd and Apache deployment examples do not read `PORT`;
+The Procfile's gunicorn command binds to `${PORT:-8091}`, so an unset `PORT`
+in the process environment still starts the service on the documented
+default port rather than leaving the bind address without one. The
+checked-in systemd and Apache deployment examples do not read `PORT`;
 they both name `8091` explicitly. A deployment that changes that production
 port changes the service-unit bind and the Apache proxy target together.
 
@@ -447,6 +498,14 @@ GENERATION_MODEL
 ```
 
 The application does not run while it is unclear what it would connect to.
+
+`GENERATION_BASE_URL` is refused, before generation, where it is not
+`https`, has no host, carries user information, a query or a fragment,
+already ends in the resource path the SDK appends itself, or carries
+whitespace anywhere in it — checked against the whole URL, not only the
+host, so that whitespace embedded in the path is refused as well. It is
+refused rather than rewritten: no whitespace is stripped or encoded away to
+make the value acceptable.
 
 ---
 
@@ -581,7 +640,11 @@ For an accepted request body it receives:
 - the optional direction
 
 The generation core then applies `MAX_INPUT_CHARS` and `MAX_POLICY_CHARS`.
-Those are character limits on the two fields, not the 1 MiB HTTP-body limit.
+Those are character limits on the two fields, not the 1 MiB HTTP-body limit,
+and they are counted the same way the input screen's own `maxlength`
+attribute and its live character count are: as a browser textarea's
+`value.length`, so the count the person watches while typing and the one the
+server enforces never disagree.
 
 It calls the generation core and returns the result screen.
 
@@ -804,8 +867,22 @@ What is not:
 - the API token
 - the `Authorization` header
 - the body of the API response
+- an unexpected exception's own message text
 
 A fault is diagnosed without any of the text being kept.
+
+Ownership of the failure log is single: the provider, the generation core and
+the prompt layer never log a failure themselves, they raise with a sanitized
+`diagnostic` instead, and `app.py`'s and `cli.py`'s error handling is the one
+place a `ReplyWriterError` is logged, using that `diagnostic` where the error
+carries one and the `user_message` otherwise. A single failure therefore
+produces one log line, not one per layer it passed through. An unexpected,
+unmapped exception is handled the same way: `app.py` no longer calls
+`logger.exception()`, which would record the exception's own message; instead
+it builds a sanitized diagnostic from the exception's class name and its
+traceback's stack frames alone, normalized onto one line, and logs that once
+through the same `ReplyWriterError` handling as `InternalError`'s
+`diagnostic`.
 
 ---
 
@@ -860,6 +937,12 @@ help
 Generating a reply uses the same generation core, the same prompt layer and the same provider layer as the web UI.
 
 The API token and the endpoint are not passed as command line arguments, so that no credential appears in a process list.
+
+A message or direction file that is not valid UTF-8 is refused with a
+sanitized message and without a traceback: the `UnicodeDecodeError`, which
+`OSError` does not catch, is caught explicitly, before the generation core
+is reached, and neither the invalid byte nor the file's contents are part of
+what is logged.
 
 ---
 

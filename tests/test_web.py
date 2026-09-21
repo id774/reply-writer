@@ -58,6 +58,10 @@
 #    - Hide the cause and the requested path of a routing failure.
 #    - Still report an unexpected failure as a server error.
 #    - Show no traceback and no internal path on any error page.
+#    - Log the diagnostic of a known ReplyWriterError exactly once,
+#      without the text the person entered or generated.
+#    - Log an unexpected failure's class and stack frames exactly once,
+#      without its own exception message.
 #    - Keep the API token out of every response.
 #    - Write no message, direction or reply to the log.
 #    - Request generation with POST, so nothing entered reaches a URL.
@@ -74,6 +78,9 @@
 #  - Flask
 #
 #  Version History:
+#  v1.2 2026-09-21
+#       Covered the single-owner diagnostic log and the removal of the
+#       raw exception message from an unexpected failure's log line.
 #  v1.1 2026-09-19
 #       Covered the character-count hooks and the submit-feedback script.
 #  v1.0 2026-08-10
@@ -351,6 +358,47 @@ class RefusalTest(WebTestCase):
         self.assertNotIn("some internal detail", page)
         self.assertNotIn("Traceback", page)
         self.assertNotIn(os.path.dirname(os.path.abspath(web.__file__)), page)
+
+    def test_logs_a_known_error_diagnostic_exactly_once(self):
+        """
+        Log the diagnostic of a known ReplyWriterError exactly once.
+
+        generate_reply raises with a sanitized diagnostic rather than
+        logging it itself, so app.py's error handler is the only place
+        the failure is recorded, and it carries the request id and the
+        diagnostic without the text the person entered or generated.
+        """
+        with self.assertLogs(logging.getLogger("app"), "ERROR") as recorded:
+            response = self.post(direction=DIRECTION, result=InternalError(
+                "generation failure: status=500"))
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(len(recorded.output), 1)
+        line = recorded.output[0]
+        self.assertIn("generation failure: status=500", line)
+        for text in (MESSAGE, DIRECTION, REPLY, SUBJECT, TOKEN):
+            self.assertNotIn(text, line)
+
+    def test_an_unexpected_failure_logs_the_class_and_stack_once(self):
+        """
+        Log the exception class and its stack frames, and nothing more.
+
+        logger.exception() is no longer used: the class name and the
+        traceback's stack frames are carried in a sanitized diagnostic
+        instead, so the exception's own message never reaches the log
+        or the page.
+        """
+        with self.assertLogs(logging.getLogger("app"), "ERROR") as recorded:
+            response = self.post(
+                result=RuntimeError("SENSITIVE_EXCEPTION_TEXT"))
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", page)
+
+        self.assertEqual(len(recorded.output), 1)
+        line = recorded.output[0]
+        self.assertIn("RuntimeError", line)
+        self.assertIn("File ", line)
+        self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", line)
 
 
 class InvariantTest(WebTestCase):

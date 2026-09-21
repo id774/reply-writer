@@ -54,6 +54,10 @@
 #    - Refuse an answer without a choice.
 #    - Refuse an empty content, and a content that is not a string.
 #    - Refuse an answer cut off by the output limit.
+#    - Refuse an answer with a missing, blank or non-string finish reason.
+#    - Accept and preserve an unknown but non-empty finish reason, rather
+#      than guess it means a truncation.
+#    - Trim the finish reason before it is carried in the result.
 #    - Map a timeout onto UpstreamTimeoutError.
 #    - Map a connection failure onto UpstreamConnectionError.
 #    - Map 401, 403, 429 and 500 onto one user facing error.
@@ -62,27 +66,37 @@
 #    - Record the shape of an answer without its content or the token.
 #    - Record the request id of the generation on both lines.
 #    - Record the wait next to the limit on an answer and on a timeout.
-#    - Keep the token and the reply out of a failure line.
+#    - Keep the token and the reply out of a failure diagnostic.
+#    - Log no failure at this layer; the entry point owns that log, and
+#      the success path's response log is unaffected.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
 #  - Standard library only (the openai package is stubbed, never imported)
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Covered the required finish reason and the move from library
+#       logging to sanitized failure diagnostics.
 #  v1.0 2026-08-10
 #       Initial release.
 #
 ########################################################################
 
+import logging
 import sys
 import unittest
 from types import ModuleType, SimpleNamespace
+from unittest import mock
 
 from config import Config
 from reply_writer.errors import (InternalError, InvalidResponseError,
                                  UpstreamConnectionError, UpstreamStatusError,
                                  UpstreamTimeoutError)
 from reply_writer.providers.openai_compatible import OpenAICompatibleProvider
+
+PROVIDER_LOGGER = logging.getLogger(
+    "reply_writer.providers.openai_compatible")
 
 TOKEN = "00000000-0000-0000-0000-000000000000:secret-value"
 
@@ -193,12 +207,16 @@ class ProviderTestCase(unittest.TestCase):
             MESSAGES, self.config, request_id)
 
     def fail_with(self, error):
-        """ Run one call that fails, and return the error and the log. """
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR") as recorded:
-            with self.assertRaises(Exception) as raised:
-                self.complete(FakeSDK(error=error))
-        return raised.exception, recorded.output
+        """
+        Run one call that fails, and return the raised error.
+
+        The provider logs no failure of its own: it raises with a
+        sanitized diagnostic instead, and the entry point that owns the
+        failure log is the one that records it.
+        """
+        with self.assertRaises(Exception) as raised:
+            self.complete(FakeSDK(error=error))
+        return raised.exception
 
 
 class ClientTest(ProviderTestCase):
@@ -260,12 +278,13 @@ class RequestTest(ProviderTestCase):
 
     def test_refuses_an_unknown_output_token_parameter_before_a_request(self):
         """ Refuse a hand-built Config before spending a request on it. """
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR"):
-            with self.assertRaises(InternalError):
+        with mock.patch.object(PROVIDER_LOGGER, "error") as error_log:
+            with self.assertRaises(InternalError) as raised:
                 self.complete(settings=config(
                     generation_output_token_parameter="automatic"))
         self.assertIsNone(self.sdk.request)
+        error_log.assert_not_called()
+        self.assertIn("automatic", raised.exception.diagnostic)
 
     def test_asks_for_a_json_object_under_json_object_mode(self):
         """ Ask the API itself for an object in that mode. """
@@ -323,32 +342,78 @@ class ResultTest(ProviderTestCase):
         result = self.complete(FakeSDK(answer(model="")))
         self.assertEqual(result.model, "configured-model")
 
-    def refuse(self, sdk):
-        """ Assert that the given answer is refused, with a logged reason. """
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR"):
-            with self.assertRaises(InvalidResponseError):
-                self.complete(sdk)
+    def refuse(self, sdk, diagnostic=None):
+        """
+        Assert that the given answer is refused, with a safe diagnostic.
+
+        The provider logs no failure of its own: it raises
+        InvalidResponseError carrying a sanitized diagnostic instead.
+        """
+        with self.assertRaises(InvalidResponseError) as raised:
+            self.complete(sdk)
+        if diagnostic is not None:
+            self.assertIn(diagnostic, raised.exception.diagnostic)
+        return raised.exception
 
     def test_refuses_an_answer_without_a_choice(self):
         """ Refuse an answer carrying nothing to read. """
         self.refuse(FakeSDK(SimpleNamespace(choices=[], model="m", usage=None,
-                                            id="")))
+                                            id="")),
+                    "answer carries no choice")
 
     def test_refuses_an_unusable_content(self):
         """ Refuse an empty content and one of the wrong type. """
-        self.refuse(FakeSDK(answer(content="   ")))
-        self.refuse(FakeSDK(answer(content=None)))
+        self.refuse(FakeSDK(answer(content="   ")),
+                    "answer carries no usable content")
+        self.refuse(FakeSDK(answer(content=None)),
+                    "answer carries no usable content")
 
     def test_refuses_an_answer_cut_off_by_the_limit(self):
         """
         Refuse a truncated answer rather than offer half a reply.
 
         Half a sentence pasted into a message is worse than no reply,
-        and the log names the setting to raise.
+        and the diagnostic names the setting to raise.
         """
         for reason in ("length", "max_tokens"):
-            self.refuse(FakeSDK(answer(finish_reason=reason)))
+            error = self.refuse(FakeSDK(answer(finish_reason=reason)))
+            self.assertIn(
+                "output was cut off (finish_reason={0}); raise "
+                "MAX_OUTPUT_TOKENS".format(reason), error.diagnostic)
+
+    def test_refuses_a_missing_or_blank_finish_reason(self):
+        """
+        Refuse an answer that does not say how the generation ended.
+
+        A missing or blank finish reason is not read as an ordinary
+        stop: an endpoint that leaves it out has said nothing about
+        whether the answer is complete.
+        """
+        for finish_reason in (None, "", "   "):
+            self.refuse(FakeSDK(answer(finish_reason=finish_reason)),
+                        "answer carries no usable finish reason")
+
+    def test_refuses_a_non_string_finish_reason(self):
+        """ Refuse a finish reason of the wrong type rather than coerce it. """
+        self.refuse(FakeSDK(answer(finish_reason=404)),
+                    "answer carries no usable finish reason")
+
+    def test_accepts_and_preserves_an_unknown_non_empty_finish_reason(self):
+        """
+        Keep an unrecognized but non-empty finish reason, not guess at it.
+
+        A compatible endpoint may use a name of its own for an ordinary
+        stop. Such a reason is neither in TRUNCATED_REASONS nor assumed
+        to mean the same as one that is: it is carried through as the
+        endpoint reported it.
+        """
+        result = self.complete(FakeSDK(answer(finish_reason="end_turn")))
+        self.assertEqual(result.finish_reason, "end_turn")
+
+    def test_trims_the_finish_reason(self):
+        """ Keep the stripped value, as the diagnostic and the field. """
+        result = self.complete(FakeSDK(answer(finish_reason="  stop  ")))
+        self.assertEqual(result.finish_reason, "stop")
 
 
 class FailureTest(ProviderTestCase):
@@ -356,21 +421,21 @@ class FailureTest(ProviderTestCase):
 
     def test_maps_a_timeout(self):
         """ Report a timeout as a timeout. """
-        error, _ = self.fail_with(FakeTimeoutError("timed out"))
+        error = self.fail_with(FakeTimeoutError("timed out"))
         self.assertIsInstance(error, UpstreamTimeoutError)
 
     def test_maps_a_connection_failure(self):
         """ Report an unreachable endpoint as one. """
-        error, _ = self.fail_with(FakeConnectionError("unreachable"))
+        error = self.fail_with(FakeConnectionError("unreachable"))
         self.assertIsInstance(error, UpstreamConnectionError)
 
     def test_maps_every_error_status_onto_one_user_facing_error(self):
-        """ Tell the person one thing, and the log which status it was. """
+        """ Tell the person one thing, and carry the status in the diagnostic. """
         for status in (401, 403, 429, 500):
-            error, recorded = self.fail_with(
+            error = self.fail_with(
                 FakeStatusError("refused", status_code=status))
             self.assertIsInstance(error, UpstreamStatusError)
-            self.assertIn("status={0}".format(status), "\n".join(recorded))
+            self.assertIn("status={0}".format(status), error.diagnostic)
 
     def test_maps_any_remaining_sdk_error(self):
         """
@@ -382,9 +447,9 @@ class FailureTest(ProviderTestCase):
         client library reaching the web layer is what the error
         hierarchy exists to prevent.
         """
-        error, recorded = self.fail_with(FakeError("unreadable answer"))
+        error = self.fail_with(FakeError("unreadable answer"))
         self.assertIsInstance(error, InvalidResponseError)
-        self.assertNotIn(TOKEN, "\n".join(recorded))
+        self.assertNotIn(TOKEN, error.diagnostic)
 
     def test_tries_no_second_endpoint(self):
         """
@@ -395,10 +460,8 @@ class FailureTest(ProviderTestCase):
         create(), so a retry of our own would fail this test.
         """
         sdk = FakeSDK(error=FakeConnectionError("unreachable"))
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR"):
-            with self.assertRaises(UpstreamConnectionError):
-                self.complete(sdk)
+        with self.assertRaises(UpstreamConnectionError):
+            self.complete(sdk)
         self.assertIsNotNone(sdk.request)
 
 
@@ -432,32 +495,41 @@ class LogTest(ProviderTestCase):
         self.assertIn("timeout=45.0", "\n".join(recorded.output))
         self.assertIn("elapsed=", "\n".join(recorded.output))
 
-        _, failed = self.fail_with(FakeTimeoutError("timed out"))
-        self.assertIn("elapsed=", "\n".join(failed))
-        self.assertIn("timeout=", "\n".join(failed))
+        failed = self.fail_with(FakeTimeoutError("timed out"))
+        self.assertIn("elapsed=", failed.diagnostic)
+        self.assertIn("timeout=", failed.diagnostic)
 
-    def test_keeps_the_token_and_the_messages_out_of_a_failure_line(self):
-        """ Record a failure without the credential or the input. """
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR") as recorded:
-            with self.assertRaises(UpstreamStatusError):
-                self.complete(FakeSDK(error=FakeStatusError("refused", 401)))
-        line = "\n".join(recorded.output)
-        self.assertNotIn(TOKEN, line)
-        self.assertNotIn(MESSAGES[1]["content"], line)
+    def test_keeps_the_token_and_the_messages_out_of_a_failure_diagnostic(self):
+        """ Carry no credential or input in a failure diagnostic. """
+        with self.assertRaises(UpstreamStatusError) as raised:
+            self.complete(FakeSDK(error=FakeStatusError("refused", 401)))
+        self.assertNotIn(TOKEN, raised.exception.diagnostic)
+        self.assertNotIn(MESSAGES[1]["content"], raised.exception.diagnostic)
 
-    def test_keeps_an_upstream_response_body_out_of_a_failure_line(self):
-        """ Record no exception text that may carry an upstream body. """
+    def test_keeps_an_upstream_response_body_out_of_a_failure_diagnostic(self):
+        """ Carry no exception text that may hold an upstream body. """
         response_body = "private text echoed by the endpoint"
-        with self.assertLogs("reply_writer.providers.openai_compatible",
-                             "ERROR") as recorded:
-            with self.assertRaises(UpstreamStatusError):
-                self.complete(FakeSDK(error=FakeStatusError(response_body,
-                                                            400)))
-        line = "\n".join(recorded.output)
-        self.assertIn("error=FakeStatusError", line)
-        self.assertIn("status=400", line)
-        self.assertNotIn(response_body, line)
+        with self.assertRaises(UpstreamStatusError) as raised:
+            self.complete(FakeSDK(error=FakeStatusError(response_body, 400)))
+        diagnostic = raised.exception.diagnostic
+        self.assertIn("error=FakeStatusError", diagnostic)
+        self.assertIn("status=400", diagnostic)
+        self.assertNotIn(response_body, diagnostic)
+
+    def test_the_failure_path_logs_nothing_at_this_layer(self):
+        """
+        Log no failure here: the entry point owns that log.
+
+        The provider raises with a sanitized diagnostic instead of
+        logging and re-raising, so a failure produces one log line at
+        the entry point rather than one per layer it passed through.
+        The success path is unaffected: log_response() still records
+        the shape of an answer, as covered above.
+        """
+        with mock.patch.object(PROVIDER_LOGGER, "error") as error_log:
+            with self.assertRaises(UpstreamConnectionError):
+                self.complete(FakeSDK(error=FakeConnectionError("unreachable")))
+        error_log.assert_not_called()
 
 
 if __name__ == "__main__":

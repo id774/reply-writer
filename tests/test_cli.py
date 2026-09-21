@@ -59,6 +59,9 @@
 #    - Refuse a configuration that cannot address an endpoint, exiting 1.
 #    - Exit 1 on an unreadable message file.
 #    - Exit 1 on an empty message, and on an upstream failure.
+#    - Exit 1 on a message or a direction file that is not valid UTF-8,
+#      without a traceback and without a request being spent.
+#    - Log the diagnostic of a ReplyWriterError exactly once.
 #    - Write no message, direction or reply to the log.
 #
 #  Requirements:
@@ -66,6 +69,8 @@
 #  - Standard library only (the generation core is stubbed)
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Covered non-UTF-8 input refusal and the single diagnostic log line.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -81,7 +86,7 @@ from unittest import mock
 
 import cli
 from reply_writer import ReplyDraft, __version__
-from reply_writer.errors import UpstreamTimeoutError
+from reply_writer.errors import InternalError, UpstreamTimeoutError
 
 # Invented material. No real correspondence is used as test data.
 MESSAGE = "打ち合わせの候補日をお送りします。ご都合はいかがでしょうか。"
@@ -128,6 +133,13 @@ class CliTestCase(unittest.TestCase):
         path = os.path.join(self.directory.name, name)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(text)
+        return path
+
+    def write_bytes(self, name, data):
+        """ Write raw bytes into the temporary directory, encoding aside. """
+        path = os.path.join(self.directory.name, name)
+        with open(path, "wb") as handle:
+            handle.write(data)
         return path
 
     def run_cli(self, arguments, result=None, stdin="", settings=None):
@@ -463,6 +475,49 @@ class FailureTest(CliTestCase):
                               result=UpstreamTimeoutError())
         self.assertEqual(status, 1)
         self.assertIn("UpstreamTimeoutError", self.logged)
+
+    def test_exits_one_on_a_non_utf8_message_file(self):
+        """
+        Refuse a message file that is not valid UTF-8, without a traceback.
+
+        The file is read before the generation core is reached, so an
+        invalid byte in it must not spend a request or leak as a
+        traceback: it is reported the same sanitized way an unreadable
+        file is.
+        """
+        path = self.write_bytes("message.bin", b"\xff\xfeInvented text")
+        status = self.run_cli(["generate", "--message", path])
+        self.assertEqual(status, 1)
+        self.generate.assert_not_called()
+        self.assertIn("not valid UTF-8", self.logged)
+        self.assertNotIn("Traceback", self.logged)
+        self.assertNotIn("\\xff", self.logged)
+
+    def test_exits_one_on_a_non_utf8_direction_file(self):
+        """ Refuse a direction file that is not valid UTF-8, the same way. """
+        path = self.write_bytes("direction.bin", b"\xff\xfeInvented text")
+        status = self.run_cli(["generate", "--message", self.message_file,
+                               "--direction", path])
+        self.assertEqual(status, 1)
+        self.generate.assert_not_called()
+        self.assertIn("not valid UTF-8", self.logged)
+        self.assertNotIn("Traceback", self.logged)
+        self.assertNotIn("\\xff", self.logged)
+
+    def test_logs_a_reply_writer_error_diagnostic_once(self):
+        """
+        Log the diagnostic of a ReplyWriterError exactly once.
+
+        generate_reply raises with a sanitized diagnostic rather than
+        logging it itself, so the command line is the only place the
+        failure is recorded, and it is recorded once.
+        """
+        status = self.run_cli(
+            ["generate", "--message", self.message_file],
+            result=InternalError("generation failure: status=500"))
+        self.assertEqual(status, 1)
+        self.assertEqual(self.logged.count("generation failure"), 1)
+        self.assertIn("generation failure: status=500", self.logged)
 
 
 class LogPrivacyTest(CliTestCase):

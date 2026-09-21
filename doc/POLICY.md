@@ -131,7 +131,8 @@ The settings decide where a private message is sent, so they are read strictly.
 - Refuse a malformed base URL before a request is made. An HTTPS URL still has
   to carry a valid host and, where present, a TCP port in the valid range.
   Parser failures, missing hosts and invalid ports are configuration errors;
-  they are not deferred to the SDK.
+  they are not deferred to the SDK. Whitespace anywhere in the URL, not only
+  in the host, is refused the same way rather than stripped or encoded away.
 - Do not infer what a compatible endpoint supports from its model name or its
   URL. A difference in behavior, such as whether a structured answer can be
   requested of the API itself, is expressed as a named setting, and a mode that
@@ -154,6 +155,11 @@ The settings decide where a private message is sent, so they are read strictly.
   or the whole inside of one code fence; an object cut out of surrounding prose
   is refused, because that is the heuristic which lets a remark by the model
   become the first line of a reply.
+- Do not accept a response with no usable finish reason. A missing, blank or
+  non-string one is refused rather than read as an ordinary stop. Do not
+  narrow this to an allowlist of `stop`: an unrecognized but non-empty reason
+  from a compatible endpoint is accepted and carried through as reported,
+  rather than guessed to mean a truncation.
 - Do not send the endpoint anything the person did not enter, beyond the
   prompts. No retrieved document, no search result, no earlier generation.
 
@@ -273,6 +279,19 @@ the configured generation API
 - Do not emit duplicate diagnostics at multiple layers merely to prove that a
   failure was observed. The layer responsible for presenting or logging the
   failure owns the message unless another interface explicitly requires one.
+  Implement this by carrying a sanitized `diagnostic` on the exception itself
+  (`ReplyWriterError.diagnostic`, separate from the user-facing
+  `user_message`) rather than by logging where a failure is detected: a
+  provider, the generation core, and the prompt layer raise with `diagnostic`
+  set instead of calling `logger.error` and re-raising, and only the entry
+  point — the Web or the CLI error handling — writes that `diagnostic` to the
+  log, exactly once per failure.
+- Never place a raw third-party or unexpected exception's own message text
+  (`str(error)`, `repr(error)`, or an SDK's exception message, which may carry
+  an upstream response body) into a `diagnostic`, a log line, or a screen. An
+  unexpected exception's sanitized diagnostic is built from its class name and
+  its traceback's stack frames alone, never `logger.exception()`, which would
+  record the exception's own message along with the frames.
 - Keep the log low-noise. One generation must not leave a trail of per-step
   lines at the default level.
 - When a third-party logger, such as the HTTP client the SDK carries, adds
@@ -558,7 +577,11 @@ finally intended, and merges as if it had been written that way.
   Invariants forbid.
 - The front end takes no build step, no bundler and no package manager of its
   own. What a page needs is served from the repository.
-- Always pass `encoding="utf-8"` for a text file operation.
+- Always pass `encoding="utf-8"` for a text file operation. A file that is not
+  valid UTF-8 is refused explicitly, with a sanitized message; it is never
+  silently decoded with replacement characters, and the raw
+  `UnicodeDecodeError`, the invalid byte, and the file's contents stay out of
+  what is shown or logged.
 - Every outbound request carries an explicit timeout, which `GENERATION_TIMEOUT`
   supplies. There is no request without one: a request that hangs holds a web
   worker until the client gives up. The timeouts of the application server and
@@ -586,7 +609,10 @@ finally intended, and merges as if it had been written that way.
   places the application does not control.
 - The Web layer refuses a whole HTTP request body over 1 MiB before form
   parsing. This transport limit is distinct from `MAX_INPUT_CHARS` and
-  `MAX_POLICY_CHARS`, which the shared generation core applies to field text.
+  `MAX_POLICY_CHARS`, which the shared generation core applies to field text,
+  counted the same way a browser textarea's `value.length` counts it, so the
+  limit shown in the browser and the one applied on the server, and by the
+  CLI, agree.
 - The stylesheet is written mobile first. No small fixed width, no horizontal
   scroll, no action that needs a hover, no navigation that is not needed, and a
   copy that is visibly confirmed. A desktop layout is what the mobile layout

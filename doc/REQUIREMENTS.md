@@ -259,6 +259,8 @@ The application log does not record:
 
 Where a fault has to be diagnosed, the metadata — the class of error, the elapsed time, a request identifier — serves in place of the text itself. Credentials are never logged.
 
+A failure is logged once, by the entry point that answers the person, rather than once per layer it passed through on its way there. An exception's own message text is not carried into that log, because it can originate deep inside a dependency and is not something this application controls the contents of; the class of exception and, for an unexpected one, its stack frames serve in its place.
+
 ## 16. Architecture
 
 A web application, structured as:
@@ -326,7 +328,11 @@ The direction field is plainly marked optional.
 
 Both fields are bounded, and where a browser can run script, the person sees
 how many of the allowed characters they have used while they type, so that
-the limit is not discovered only after a refusal.
+the limit is not discovered only after a refusal. The server side limit is
+counted the same way the browser counts it while the person types, so that a
+message the on-screen counter accepted is never refused once it reaches the
+server; the command line, which has no counter of its own, applies the same
+count as the Web UI.
 
 ### 18.2 Result
 
@@ -370,6 +376,8 @@ What comes back from the model is received in a form the application can interpr
 
 The reply body, and a subject where one is used, are separate fields. Guessing that the first line of a piece of prose is the subject, and other unstable heuristics, are not relied on. An explanation or a preamble from the model has no way into the reply body.
 
+A response is accepted only where the endpoint reports a usable, non-empty completion reason. One missing or blank is not read as an ordinary stop, because it says nothing about whether the answer is complete; a reason meaning the output was cut off is refused, as before, and any other non-empty reason is accepted rather than guessed to mean a truncation.
+
 The response format itself is settled in the basic design.
 
 ## 21. Errors
@@ -378,11 +386,18 @@ These are reported in a form the person understands:
 
 - the input is empty
 - the input exceeds what is accepted
+- the input, on the command line, is not valid UTF-8
 - the generation API cannot be reached
 - the generation API timed out
 - the generation API returned an error
 - the result was not in the expected form
 - the application failed internally
+
+An input that is not valid UTF-8 is refused before it reaches the generation
+core, in the same understandable form and without a traceback, whether the
+malformed bytes are in the message, the direction, or a prompt file read from
+disk. A malformed generation endpoint address is refused the same way,
+whitespace embedded anywhere in it included, before a request is made.
 
 The error screen never shows:
 

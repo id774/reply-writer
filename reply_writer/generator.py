@@ -36,13 +36,14 @@
 #  - Standard library only; the provider brings the client
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Matched input limits to textarea length and carried safe diagnostics.
 #  v1.0 2026-08-10
 #       Initial release.
 #
 ########################################################################
 
 import json
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -54,7 +55,24 @@ from reply_writer.formatter import normalize_body, normalize_subject
 from reply_writer.prompts import build_reply_messages
 from reply_writer.providers import build_provider
 
-logger = logging.getLogger(__name__)
+
+def _textarea_length(text: str) -> int:
+    """
+    Return the length of text as a browser textarea's value.length.
+
+    A browser counts UTF-16 code units: CRLF and a lone CR each count
+    as the one LF a textarea normalizes a line ending to, a character
+    inside the Basic Multilingual Plane counts as one, and a character
+    above it, which JavaScript represents as a surrogate pair, counts
+    as two. MAX_INPUT_CHARS and MAX_POLICY_CHARS are enforced through
+    this same count, on the web and on the CLI, so the limit shown in
+    the browser and the one applied on the server never disagree.
+    """
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return sum(
+        2 if ord(character) > 0xffff else 1
+        for character in normalized
+    )
 
 
 def _unwrap_fence(content: str) -> str:
@@ -99,15 +117,13 @@ def _payload(content: str, response_mode: str) -> Dict[str, Any]:
 
     try:
         payload = json.loads(text)
-    except ValueError as error:
-        # The answer itself stays out of the log: what is useful is
-        # that it was not JSON, and where the parser gave up.
-        logger.error("The answer is not readable as JSON: %s", error)
-        raise InvalidResponseError()
+    except ValueError:
+        # The answer itself, and the parser's own message, stay out of
+        # the diagnostic: what is useful is that it was not JSON.
+        raise InvalidResponseError("answer is not readable as JSON") from None
 
     if not isinstance(payload, dict):
-        logger.error("The answer is JSON but not an object")
-        raise InvalidResponseError()
+        raise InvalidResponseError("answer is JSON but not an object")
     return payload
 
 
@@ -115,8 +131,7 @@ def _body(payload: Dict[str, Any]) -> str:
     """ Return the reply body the answer carries, or refuse the answer. """
     body = payload.get("body")
     if not isinstance(body, str) or not body.strip():
-        logger.error("The answer has no usable body")
-        raise InvalidResponseError()
+        raise InvalidResponseError("answer has no usable body")
     return body
 
 
@@ -134,8 +149,7 @@ def _subject(payload: Dict[str, Any]) -> Optional[str]:
     if subject is None:
         return None
     if not isinstance(subject, str):
-        logger.error("The subject of the answer is not a string or null")
-        raise InvalidResponseError()
+        raise InvalidResponseError("answer subject is not a string or null")
     return subject
 
 
@@ -164,9 +178,9 @@ def validate_input(message: str, direction: str, config: Config) -> None:
     """
     if not message.strip():
         raise EmptyInputError()
-    if len(message) > config.max_input_chars:
+    if _textarea_length(message) > config.max_input_chars:
         raise InputTooLongError(config.max_input_chars)
-    if len(direction) > config.max_policy_chars:
+    if _textarea_length(direction) > config.max_policy_chars:
         raise DirectionTooLongError(config.max_policy_chars)
 
 
@@ -204,8 +218,8 @@ def generate_reply(message: str, direction: str, config: Config,
     # than shown, because a blank draft on the screen reads as a fault
     # of the screen and tells the person nothing to do about it.
     if not body:
-        logger.error("The answer carries no body outside its markup")
-        raise InvalidResponseError()
+        raise InvalidResponseError(
+            "answer carries no body outside its markup")
 
     return ReplyDraft(
         body=body,

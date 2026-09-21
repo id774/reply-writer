@@ -10,13 +10,17 @@ v1.0.2 (Release Date: TBD)
 - Reject using standard input for both CLI message and direction.
 - Frame prompt inputs with collision-free request boundaries, keeping received
   messages data and directions limited to reply-writing instructions.
-- Reject malformed endpoint hosts and ports before generation, keep LOG_LEVEL's
-  INFO fallback robust, and document configuration limits consistently.
+- Reject malformed endpoint hosts, ports and embedded whitespace before
+  generation, keep LOG_LEVEL's INFO fallback robust and document limits.
 - Keep missing information from creating a future undertaking absent from input.
 - Add GENERATION_OUTPUT_TOKEN_PARAMETER so MAX_OUTPUT_TOKENS can use
   max_tokens or max_completion_tokens without endpoint guessing.
-- Show a live character count on the message and direction fields, and add
-  a Generating notice with submit disable and duplicate-submit suppression.
+- Show live message/direction counts, match server limits to textarea length,
+  and add Generating feedback with duplicate-submit suppression.
+- Refuse non-UTF-8 CLI inputs and prompt files without exposing a traceback.
+- Log each failure once at the entry point without raw exception text.
+- Require a usable finish reason before accepting a generation response.
+- Make the Procfile use port 8091 when PORT is unset.
 
 v1.0.1 (2026-08-26)
 -------------------

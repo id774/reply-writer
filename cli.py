@@ -71,6 +71,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.3 2026-09-21
+#       Refused non-UTF-8 inputs and logged sanitized failures once.
 #  v1.2 2026-09-08
 #       Refused simultaneous standard-input sources for message and direction.
 #  v1.1 2026-09-06
@@ -219,10 +221,21 @@ def main() -> int:
         direction = read_text(arguments.direction)
         draft = generate_reply(message, direction, config, new_request_id())
     except ReplyWriterError as error:
-        # Fall back to user_message. Most of these carry no text of
-        # their own, so the class name alone would say nothing.
-        logger.error("%s: %s", type(error).__name__,
-                     str(error) or error.user_message)
+        # This is the one place a ReplyWriterError is logged. Every
+        # layer below raises with a sanitized diagnostic instead of
+        # logging and re-raising, so a single failure produces a
+        # single log line. Falling back to user_message covers the
+        # errors that carry no diagnostic of their own.
+        detail = error.diagnostic or error.user_message
+        logger.error("%s: %s", type(error).__name__, detail)
+        return 1
+    except UnicodeDecodeError:
+        # Caught apart from OSError, which it is not a subclass of, so
+        # that a message or direction file that cannot be decoded is
+        # refused the same way an unreadable one is: without a
+        # traceback and with a message that names neither the raw
+        # decode failure nor any byte of the file.
+        logger.error("Cannot read the input: the file is not valid UTF-8.")
         return 1
     except OSError as error:
         logger.error("Cannot read the input: %s", error)
