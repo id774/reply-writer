@@ -51,7 +51,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Centralized sanitized failure diagnostics at the Web entry point.
+#       Centralized sanitized Web failure diagnostics and kept raw HTTP
+#       exception and request-path text out of logs.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -193,7 +194,8 @@ def handle_known_error(error: ReplyWriterError):
 def handle_request_too_large(error: RequestEntityTooLarge):
     """ Refuse an oversized request without parsing its form again. """
     request_id = _request_id()
-    logger.info("RequestEntityTooLarge (request %s): %s", request_id, error)
+    logger.info("RequestEntityTooLarge (request %s): status=%s", request_id,
+               error.code)
     page = render_template(
         "error.html",
         error="The request is too large. Reduce its contents and try again.",
@@ -219,8 +221,8 @@ def handle_http_error(error: HTTPException):
     """
     request_id = _request_id()
     level = logging.INFO if error.code < 500 else logging.ERROR
-    logger.log(level, "%s (request %s): %s %s", type(error).__name__,
-               request_id, error.code, request.path)
+    logger.log(level, "%s (request %s): status=%s", type(error).__name__,
+               request_id, error.code)
 
     page = render_template(
         "error.html",

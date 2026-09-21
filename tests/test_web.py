@@ -50,12 +50,14 @@
 #    - Keep what was typed on the page when the message is too long.
 #    - Refuse an empty message with status 400.
 #    - Refuse a request larger than the server limit with status 413.
+#    - Log the 413 status only, never the exception's own description.
 #    - Hide the cause of a generation failure behind its own status.
 #    - Map a timeout onto 504 and an unreachable endpoint onto 502.
 #    - Show a request id on a failure that is not the person's to fix.
 #    - Answer an unknown address with 404 rather than 500.
 #    - Refuse a method the address does not accept with status 405.
-#    - Hide the cause and the requested path of a routing failure.
+#    - Hide the cause and the requested path of a routing failure, on the
+#      page and in the log alike.
 #    - Still report an unexpected failure as a server error.
 #    - Show no traceback and no internal path on any error page.
 #    - Log the diagnostic of a known ReplyWriterError exactly once,
@@ -79,8 +81,8 @@
 #
 #  Version History:
 #  v1.2 2026-09-21
-#       Covered the single-owner diagnostic log and the removal of the
-#       raw exception message from an unexpected failure's log line.
+#       Covered single-owner sanitized Web failure logs, including HTTP
+#       exceptions, without raw exception or requested-path text.
 #  v1.1 2026-09-19
 #       Covered the character-count hooks and the submit-feedback script.
 #  v1.0 2026-08-10
@@ -93,6 +95,8 @@ import os
 import re
 import unittest
 from unittest import mock
+
+from werkzeug.exceptions import RequestEntityTooLarge
 
 import config as config_module
 
@@ -310,6 +314,25 @@ class RefusalTest(WebTestCase):
         response = self.client.post("/generate", data={"message": oversized})
         self.assertEqual(response.status_code, 413)
 
+    def test_request_too_large_log_omits_exception_message(self):
+        """
+        Log the status only, never the exception's own description text.
+
+        werkzeug lets a RequestEntityTooLarge carry a description; that
+        text is not something this application wrote, and it stays out
+        of the log the same way any other exception's own message does.
+        """
+        error = RequestEntityTooLarge(description="SENSITIVE_EXCEPTION_TEXT")
+        with self.assertLogs(logging.getLogger("app"), "INFO") as recorded:
+            with web.app.test_request_context("/generate"):
+                page, status = web.handle_request_too_large(error)
+        self.assertEqual(status, 413)
+        self.assertEqual(len(recorded.output), 1)
+        line = recorded.output[0]
+        self.assertIn("RequestEntityTooLarge", line)
+        self.assertIn("status=413", line)
+        self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", line)
+
     def test_hides_the_cause_of_a_generation_failure(self):
         """ Answer with a status and a sentence, and nothing internal. """
         response = self.post(result=UpstreamConnectionError())
@@ -345,9 +368,23 @@ class RefusalTest(WebTestCase):
             self.assertNotIn("Traceback", response.get_data(as_text=True))
 
     def test_hides_the_requested_path_of_a_routing_failure(self):
-        """ Reflect nothing the visitor asked for back onto the page. """
-        page = self.client.get("/nowhere-at-all").get_data(as_text=True)
-        self.assertNotIn("nowhere-at-all", page)
+        """
+        Reflect nothing the visitor asked for back onto the page or the log.
+
+        The requested path is client-controlled input, and the class
+        together with the status is enough to diagnose a routing
+        failure, so the path itself is not part of what is recorded.
+        """
+        with self.assertLogs(logging.getLogger("app"), "INFO") as recorded:
+            response = self.client.get("/SENSITIVE_ROUTING_PATH")
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("SENSITIVE_ROUTING_PATH", page)
+
+        self.assertEqual(len(recorded.output), 1)
+        line = recorded.output[0]
+        self.assertIn("status=404", line)
+        self.assertNotIn("SENSITIVE_ROUTING_PATH", line)
 
     def test_reports_an_unexpected_failure_as_a_server_error(self):
         """ Report a failure of ours as ours, without its detail. """
