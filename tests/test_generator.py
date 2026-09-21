@@ -48,6 +48,8 @@
 #    - Clean the reply body through the formatter.
 #    - Refuse an answer that is not JSON.
 #    - Refuse an answer that is JSON but not an object.
+#    - Refuse NaN, Infinity and -Infinity wherever they occur, including
+#      nested, while still accepting a standard JSON extra field.
 #    - Refuse an answer with no body, and one whose body is blank.
 #    - Refuse an answer whose body is not a string.
 #    - Unwrap a fenced object under prompt-json.
@@ -72,8 +74,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Covered textarea-equivalent length limits and safe invalid-answer
-#       diagnostics in place of a library-layer log.
+#       Covered textarea-equivalent limits, safe invalid-answer diagnostics
+#       and rejection of non-standard JSON constants.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -389,6 +391,42 @@ class InvalidAnswerTest(GeneratorTestCase):
         """ Refuse a list or a bare string. """
         self.refuse('["a", "b"]', "answer is JSON but not an object")
         self.refuse('"a reply"', "answer is JSON but not an object")
+
+    def test_refuses_nonstandard_json_constants(self):
+        """
+        Refuse NaN, Infinity and -Infinity, which are not standard JSON.
+
+        json.loads() accepts these by default. Each is placed in a field
+        the application does not read, so the refusal is proven to come
+        from the document as a whole failing strict JSON parsing, not
+        from a type check on 'body' or 'subject' happening to reject it.
+        """
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                content = (
+                    '{{"subject": null, "body": "reply", "extra": {0}}}'
+                ).format(constant)
+                error = self.refuse(content, "answer is not readable as JSON")
+                self.assertNotIn(constant, error.diagnostic)
+
+    def test_refuses_a_nonstandard_json_constant_when_nested(self):
+        """ Refuse a non-standard constant however deep it is nested. """
+        content = (
+            '{"subject": null, "body": "reply", "meta": {"score": NaN}}'
+        )
+        self.refuse(content, "answer is not readable as JSON")
+
+    def test_keeps_accepting_standard_json_extra_fields(self):
+        """
+        Accept an unknown but standard JSON field, unlike a non-standard one.
+
+        This is what keeps the constant rejection from becoming a field
+        whitelist: an extra field is tolerated as long as the document as
+        a whole is standard JSON.
+        """
+        content = '{"subject": null, "body": "reply", "extra": 1.5}'
+        draft = self.generate(content)
+        self.assertEqual(draft.body, "reply")
 
     def test_refuses_an_answer_with_no_body(self):
         """ Refuse an answer missing the one required field. """

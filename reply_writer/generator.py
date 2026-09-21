@@ -37,7 +37,8 @@
 #
 #  Version History:
 #  v1.1 2026-09-21
-#       Matched input limits to textarea length and carried safe diagnostics.
+#       Matched input limits to textarea length, carried safe diagnostics and
+#       rejected non-standard JSON constants.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -109,6 +110,21 @@ def _unwrap_fence(content: str) -> str:
     return inner.strip()
 
 
+def _reject_nonstandard_json_constant(_value: str) -> None:
+    """
+    Refuse a non-standard JSON constant wherever the parser meets one.
+
+    json.loads() accepts NaN, Infinity and -Infinity by default, which
+    are not standard JSON. Passing this as parse_constant turns any of
+    them, at any position in the document, into the same ValueError an
+    ordinary syntax error would raise, rather than a value silently
+    admitted into the result. The token itself is not carried into the
+    exception message: what is useful is that the document was not
+    standard JSON.
+    """
+    raise ValueError("non-standard JSON constant")
+
+
 def _payload(content: str, response_mode: str) -> Dict[str, Any]:
     """ Read the JSON object carried by the answer. """
     text = content.strip()
@@ -116,7 +132,10 @@ def _payload(content: str, response_mode: str) -> Dict[str, Any]:
         text = _unwrap_fence(text)
 
     try:
-        payload = json.loads(text)
+        payload = json.loads(
+            text,
+            parse_constant=_reject_nonstandard_json_constant,
+        )
     except ValueError:
         # The answer itself, and the parser's own message, stay out of
         # the diagnostic: what is useful is that it was not JSON.

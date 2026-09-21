@@ -125,6 +125,10 @@ The answer is one JSON object:
 
 The reason for the object is the separation. Reading a reply out of prose means deciding by heuristic which part is the subject and which the body, and that is exactly how a remark by the model becomes the first line of a message somebody sends. Two named fields make that impossible.
 
+The object must be standard JSON. `NaN`, `Infinity` and `-Infinity` are
+not JSON values and are refused anywhere in the answer rather than accepted
+through Python's permissive decoder.
+
 ## What surrounds the object
 
 Nothing may.
