@@ -30,6 +30,8 @@
 #  - Standard library only; a provider module brings its own client
 #
 #  Version History:
+#  v1.1 2026-09-21
+#       Left provider-selection failure logging to the entry point.
 #  v1.0 2026-08-10
 #       Initial release.
 #
@@ -112,8 +114,6 @@ def build_provider(config: Config) -> GenerationProvider:
     """
     loader = BACKENDS.get(config.generation_backend)
     if loader is None:
-        logger.error("GENERATION_BACKEND '%s' has no provider; known: %s",
-                     config.generation_backend, ", ".join(sorted(BACKENDS)))
         raise InternalError("unknown generation backend")
     return loader()()
 
