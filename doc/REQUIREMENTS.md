@@ -378,6 +378,10 @@ The reply body, and a subject where one is used, are separate fields. Guessing t
 
 A response is accepted only where the endpoint reports a usable, non-empty completion reason. One missing or blank is not read as an ordinary stop, because it says nothing about whether the answer is complete; a reason meaning the output was cut off is refused, as before, and any other non-empty reason is accepted rather than guessed to mean a truncation.
 
+JSON means standard JSON. Non-standard numeric constants such as `NaN`,
+`Infinity` and `-Infinity` are malformed results and are refused wherever
+they occur in the returned object.
+
 The response format itself is settled in the basic design.
 
 ## 21. Errors

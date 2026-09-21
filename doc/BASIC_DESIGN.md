@@ -598,6 +598,10 @@ Where a subject is needed — in mail, most often — `subject` carries a string
 
 An explanation or an annotation from the model outside the JSON is not accepted. Splitting a piece of prose afterwards to guess which part is the subject and which the body is not how this works.
 
+The parser accepts standard JSON only. Python's non-standard `NaN`,
+`Infinity` and `-Infinity` constants are refused at parse time even where
+they occur in a field the application otherwise ignores.
+
 ---
 
 ## 15. Response modes

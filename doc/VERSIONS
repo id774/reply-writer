@@ -21,6 +21,7 @@ v1.0.2 (Release Date: TBD)
 - Log each failure once at the entry point without raw exception text.
 - Require a usable finish reason before accepting a generation response.
 - Make the Procfile use port 8091 when PORT is unset.
+- Refuse non-standard NaN and Infinity constants in generated JSON responses.
 
 v1.0.1 (2026-08-26)
 -------------------
