@@ -64,6 +64,14 @@ to match a more general rule.
   write a direction where one is needed, generate, copy. A change that
   lengthens that path has to earn its place before anything else about it is
   discussed.
+- Use `must`, `always`, and `never` only for invariants that admit no
+  reasonable exception. Express preferences and situational decisions with
+  `prefer`, `should`, or other qualified wording. Do not apply a rule literally
+  where doing so would defeat the repository's stated purpose, intended
+  behavior, compatibility, safety, or approved change scope. Where the
+  applicable specifications and policy leave a legitimate choice open, an
+  explicit maintainer decision governs that choice; general conventions do not
+  override it.
 
 ### 1.4 Invariants
 These lines are not crossed by a setting or by an extension.
@@ -628,6 +636,15 @@ the configured generation API
   specification — a formula the reply must not fall into, a phrase it must not
   add — the string is quoted literally, because an English translation of it
   would match nothing.
+- Write English explanatory prose in clear, natural sentences. Do not replace a
+  sentence with a label and a colon, a status prefix such as `Implement:` or
+  `Incompatible:`, a symbol, or an unexplained abbreviation. Apply this to
+  English prose in comments, docstrings, documentation, version histories,
+  release notes, commit messages, and pull request descriptions. This rule does
+  not alter the established forms of headings, list labels, tables, code,
+  configuration syntax, machine-readable fields, literal interface strings, or
+  non-English content required by the repository's purpose. Do not rewrite
+  historical entries or unrelated text merely to align their style.
 
 ### 1.18 Pull Request Scope and History
 A pull request presents the change it proposes, not the sequence of corrections
