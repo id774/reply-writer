@@ -18,6 +18,14 @@ to match a more general rule.
 
 ---
 
+## 0. Governing Principle
+
+**Simplicity is robustness.**
+
+This principle governs the following implementation and maintenance rules. It
+does not permit dropping required behavior, security, compatibility, or
+validation; satisfy those obligations without unnecessary complexity.
+
 ## 1. General Policy
 
 ### 1.1 Purpose and Scope
@@ -122,9 +130,9 @@ requirements, and recorded here once it has been.
 ### 1.6 The Generation Endpoint
 The settings decide where a private message is sent, so they are read strictly.
 
-- Do not choose an endpoint implicitly. The backend, the token, the base URL
-  and the model are required, and a missing one stops the process instead of
-  being filled in with a default.
+- Follow the configured endpoint and its required settings as documented in
+  the authoritative requirements and usage instructions. Do not invent
+  defaults or proceed when a required setting is absent.
 - Do not accept an unknown backend. A value the code has no provider for is
   refused before a request, never coerced to a supported backend.
 - Do not switch to a second endpoint when the first one fails. One generation
@@ -738,9 +746,8 @@ A change that is correct but cannot be explained by the requirements is a sign
 that the requirements are incomplete, and that is where it is taken.
 
 ### 1.20 License
-- The repository is dual licensed under the GPL version 3 or the LGPL version
-  3, at the user's option. The full texts live in `doc/LICENSE.md`,
-  `doc/COPYING` and `doc/COPYING.LESSER`.
+- Follow the applicable terms in `doc/LICENSE.md`, `doc/COPYING`, and
+  `doc/COPYING.LESSER`; those documents are the authority for licensing.
 - Every module header repeats the license line of the standard identifying
   block, so that a file read on its own still states its terms.
 - Add a dependency only when its license is compatible with that choice.
