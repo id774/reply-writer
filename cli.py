@@ -59,8 +59,8 @@
 #       return.
 #  - 1: The command failed: a setting or an option was refused, the
 #       generation settings cannot address an endpoint, the message
-#       could not be read or was empty, or the endpoint did not return
-#       a usable draft.
+#       could not be read or was empty, the endpoint did not return
+#       a usable draft, or the draft could not be printed.
 #  - 2: The command line was rejected by argparse, for example an
 #       unknown option, a missing subcommand, --timeout given something
 #       that is not a number, or --message and --direction both given

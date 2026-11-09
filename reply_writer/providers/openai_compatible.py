@@ -34,7 +34,7 @@
 #
 #  Version History:
 #  v1.3 2026-11-09
-#       Added sanitized metadata to invalid-response diagnostics.
+#       Sanitized invalid-response diagnostics and SDK error metadata.
 #  v1.2 2026-09-21
 #       Required a usable finish reason, carried sanitized failure diagnostics
 #       and refused unknown response modes before a request.
@@ -216,8 +216,10 @@ class OpenAICompatibleProvider:
             config.endpoint_host,
             config.generation_model,
             type(error).__name__,
-            status_code if status_code is not None else "-",
-            getattr(error, "request_id", None) or "-",
+            (status_code if type(status_code) is int
+             and 100 <= status_code <= 599 else "-"),
+            ("present" if isinstance(getattr(error, "request_id", None), str)
+             and getattr(error, "request_id", None) else "-"),
             self._elapsed(started),
             config.generation_timeout,
         )

@@ -260,6 +260,31 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(config.generation_model, "test-model")
 
 
+    def test_parses_large_exact_integer_without_rounding(self):
+        """ Keep a large integer exact and accept integral notations. """
+        self.assertEqual(
+            self.load(MAX_INPUT_CHARS="9007199254740993").max_input_chars,
+            9007199254740993)
+        self.assertEqual(self.load(MAX_OUTPUT_TOKENS="2e0").max_output_tokens,
+                         2)
+        self.assertEqual(
+            self.load(GENERATION_MAX_RETRIES="2e0").generation_max_retries, 2)
+        self.assertEqual(self.load(PORT="65535.0").port, 65535)
+        self.assertEqual(self.load().max_input_chars, 8000)
+
+    def test_refuses_fractional_whole_number_values_before_use(self):
+        """ Refuse a fraction a float would have rounded onto an integer. """
+        for name, value in (("MAX_OUTPUT_TOKENS", "1.0000000000000001"),
+                            ("GENERATION_MAX_RETRIES", "1e-400"),
+                            ("PORT", "65535.0000000000000001")):
+            with self.subTest(name=name):
+                with self.assertRaises(ConfigError) as refusal:
+                    self.load(**{name: value})
+                self.assertIn(name, str(refusal.exception))
+                self.assertIn("expected a whole number",
+                              str(refusal.exception))
+
+
 class ConfigValueTest(unittest.TestCase):
     """ Cover what a Config exposes once it has been built. """
 

@@ -387,6 +387,19 @@ class InvalidAnswerTest(GeneratorTestCase):
         self.refuse("ご連絡ありがとうございます。",
                     "answer is not readable as JSON")
 
+    def test_refuses_excessively_nested_json_as_invalid_response(self):
+        """ Classify a RecursionError from deep nesting as unreadable JSON. """
+        # Beyond the interpreter's recursion limit, and deep enough to
+        # exhaust the C decoder's own limit on newer interpreters too.
+        depth = max(sys.getrecursionlimit() + 100, 100000)
+        content = "[" * depth + "0" + "]" * depth
+        error = self.refuse(content, "answer is not readable as JSON")
+        self.assertEqual(error.status_code, 502)
+        self.assertEqual(error.diagnostic, "answer is not readable as JSON")
+        self.assertNotIn("[[[", error.diagnostic)
+        self.assertNotIn("recursion", error.diagnostic.lower())
+        self.assertEqual(len(self.provider.calls), 1)
+
     def test_refuses_json_that_is_not_an_object(self):
         """ Refuse a list or a bare string. """
         self.refuse('["a", "b"]', "answer is JSON but not an object")

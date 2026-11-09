@@ -300,7 +300,7 @@ The screen shows a sentence the person can act on, and on a failure that is not 
 
 An error never means a reply was sent to the correspondent. It does not prove that the generation API received no data: a generation request may already have reached the configured endpoint. For an oversized Web request rejected before form parsing, the error page cannot restore the original input.
 
-The log carries the other half: the request id, the backend, the host of the endpoint, the model, the HTTP status, the finish reason, the token counts, the elapsed seconds beside the limit, and the class of the error. A person reporting a fault quotes the request id, and the log is read at that id.
+The log carries the other half: the application's request id, the backend, the endpoint host, the configured model, a validated HTTP status, `stop` or `other` for an accepted finish reason, bounded nonnegative integer token counts, whether an upstream request id was present, the elapsed seconds beside the timeout, and the class of an error. Raw upstream string metadata is never logged. A person reporting a fault quotes the application's request id, and the log is read at that id.
 
 What the log never carries, at any level, is the received message, the direction, the assembled prompts, the generated reply, the body of the API response, the API token or the `Authorization` header. Raising `LOG_LEVEL` reveals none of it, and there is no setting that turns it back on.
 

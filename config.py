@@ -87,7 +87,7 @@
 #
 #  Version History:
 #  v1.5 2026-11-09
-#       Rejected whitespace in raw generation base URL values.
+#       Rejected raw base URL whitespace and parsed integer settings exactly.
 #  v1.4 2026-09-21
 #       Refused embedded whitespace anywhere in generation base URLs.
 #  v1.3 2026-09-12
@@ -104,6 +104,7 @@
 import math
 import os
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -208,15 +209,22 @@ def _whole(name: str, default: int, minimum: int) -> int:
     """ Read a whole number and refuse one below the given minimum. """
     raw = _text(name, "")
     value = _number(name, float(default))
-    if raw and value != int(value):
-        raise ConfigError(
-            "{0} is '{1}'; expected a whole number.".format(name, raw))
-    if value < minimum:
+    if raw:
+        # Judged on the original text, so that a value a float would
+        # round onto an integer is refused and a large integer is kept.
+        exact = Decimal(raw)
+        if exact != exact.to_integral_value():
+            raise ConfigError(
+                "{0} is '{1}'; expected a whole number.".format(name, raw))
+        whole = int(exact)
+    else:
+        whole = int(value)
+    if whole < minimum:
         expected = ("zero or a positive integer" if minimum == 0
                     else "an integer of {0} or more".format(minimum))
         raise ConfigError(
             "{0} is {1}; expected {2}.".format(name, raw, expected))
-    return int(value)
+    return whole
 
 
 def _validate_timeout(value: float, raw) -> float:
