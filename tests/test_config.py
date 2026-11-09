@@ -251,6 +251,15 @@ class LoadConfigTest(unittest.TestCase):
                 self.load(PORT=value)
 
 
+    def test_preserves_raw_base_url_for_validation(self):
+        """ Keep the original base URL so validation can see its spaces. """
+        config = self.load(GENERATION_BASE_URL=" https://api.example.test/v1 ",
+                           GENERATION_MODEL="  test-model  ")
+        self.assertEqual(config.generation_base_url,
+                         " https://api.example.test/v1 ")
+        self.assertEqual(config.generation_model, "test-model")
+
+
 class ConfigValueTest(unittest.TestCase):
     """ Cover what a Config exposes once it has been built. """
 
@@ -417,6 +426,42 @@ class ValidateGenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ConfigError) as refusal:
                 validate_generation_config(config)
             self.assertNotIn(TOKEN, str(refusal.exception))
+
+
+    def test_refuses_surrounding_whitespace_in_base_url(self):
+        """ Refuse whitespace anywhere in the original base URL. """
+        loader = LoadConfigTest()
+        raw_values = (
+            " https://api.example.test/v1",
+            "https://api.example.test/v1 ",
+            " https://api.example.test/v1 ",
+            "https://api.example.test/ v1",
+            "\thttps://api.example.test/v1",
+            "https://api.example.test/v1\n",
+        )
+        for raw in raw_values:
+            with self.subTest(raw=raw):
+                config = loader.load(
+                    GENERATION_BACKEND="openai-compatible",
+                    GENERATION_API_TOKEN=TOKEN,
+                    GENERATION_BASE_URL=raw,
+                    GENERATION_MODEL="test-model")
+                with self.assertRaises(ConfigError) as refusal:
+                    validate_generation_config(config)
+                self.assertEqual(str(refusal.exception), BASE_URL_SHAPE_ERROR)
+
+    def test_accepts_clean_base_url_and_requires_one(self):
+        """ Accept a URL without whitespace and keep the required error. """
+        loader = LoadConfigTest()
+        settings = dict(GENERATION_BACKEND="openai-compatible",
+                        GENERATION_API_TOKEN=TOKEN,
+                        GENERATION_MODEL="test-model")
+        validate_generation_config(loader.load(
+            GENERATION_BASE_URL="https://api.example.test/v1", **settings))
+        with self.assertRaises(ConfigError) as refusal:
+            validate_generation_config(loader.load(**settings))
+        self.assertEqual(str(refusal.exception),
+                         "GENERATION_BASE_URL is required.")
 
 
 class ProcfileTest(unittest.TestCase):

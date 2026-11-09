@@ -440,6 +440,44 @@ class ResultTest(ProviderTestCase):
         self.assertEqual(result.finish_reason, "stop")
 
 
+    def test_invalid_response_diagnostic_carries_safe_metadata(self):
+        """ Carry request metadata and the fixed reason, nothing else. """
+        cases = (
+            (SimpleNamespace(choices=[], model="m", usage=None, id="u"),
+             "answer carries no choice"),
+            (answer(finish_reason=None),
+             "answer carries no usable finish reason"),
+            (answer(content=""), "answer carries no usable content"),
+            (answer(finish_reason="length"),
+             "output was cut off (finish_reason=length); raise "
+             "MAX_OUTPUT_TOKENS"),
+        )
+        for response, detail in cases:
+            with self.subTest(detail=detail):
+                sdk = FakeSDK(response)
+                sdk.install(self)
+                with self.assertLogs(PROVIDER_LOGGER, "DEBUG") as logged:
+                    PROVIDER_LOGGER.debug("sentinel")
+                    with self.assertRaises(InvalidResponseError) as raised:
+                        OpenAICompatibleProvider().complete(
+                            MESSAGES, config(), "abcd1234")
+                diagnostic = raised.exception.diagnostic
+                self.assertTrue(diagnostic.startswith(
+                    "generation invalid response: request_id=abcd1234 "
+                    "backend=openai-compatible endpoint_host=api.example.test "
+                    "model=configured-model detail=" + detail + " elapsed="))
+                self.assertRegex(diagnostic, r" elapsed=\d+(\.\d+)? timeout=")
+                self.assertNotIn(TOKEN, diagnostic)
+                self.assertNotIn(REPLY, diagnostic)
+                for message in MESSAGES:
+                    self.assertNotIn(message["content"], diagnostic)
+                self.assertEqual(len(logged.output), 1)
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertTrue(raised.exception.__suppress_context__)
+                self.assertIsNotNone(sdk.request)
+                sys.modules.pop("openai", None)
+
+
 class FailureTest(ProviderTestCase):
     """ Cover the mapping of an SDK failure onto our own errors. """
 

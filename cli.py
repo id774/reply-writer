@@ -71,6 +71,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.4 2026-11-09
+#       Handled draft output failures without exposing exception details.
 #  v1.3 2026-09-21
 #       Refused non-UTF-8 input, sanitized file and unexpected failures,
 #       and logged application failures once.
@@ -263,7 +265,16 @@ def main() -> int:
         logger.error("Unexpected failure: %s", _unexpected_diagnostic(error))
         return 1
 
-    report(draft, arguments.json)
+    try:
+        report(draft, arguments.json)
+    except (OSError, UnicodeError) as error:
+        # Only the class name is logged: the exception's own message
+        # may carry text that does not belong in the log.
+        logger.error("Cannot write the output: %s.", type(error).__name__)
+        return 1
+    except Exception as error:
+        logger.error("Unexpected failure: %s", _unexpected_diagnostic(error))
+        return 1
     return 0
 
 

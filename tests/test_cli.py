@@ -554,6 +554,33 @@ class FailureTest(CliTestCase):
         self.assertIn("generation failure: status=500", self.logged)
 
 
+    def test_broken_pipe_while_printing_returns_one(self):
+        """ Report a failed output by class name only. """
+        with mock.patch("cli.report", side_effect=BrokenPipeError(
+                "PRIVATE_ERROR_TEXT")):
+            status = self.run_cli(["generate", "--message", self.message_file])
+        self.assertEqual(status, 1)
+        self.generate.assert_called_once()
+        self.assertEqual(self.logged.count("Cannot write the output"), 1)
+        self.assertIn("BrokenPipeError", self.logged)
+        for stream in (self.logged, self.printed, self.err.getvalue()):
+            self.assertNotIn("PRIVATE_ERROR_TEXT", stream)
+            self.assertNotIn("Traceback", stream)
+
+    def test_unicode_encoding_failure_while_printing_returns_one(self):
+        """ Report an encoding failure without its content. """
+        error = UnicodeEncodeError("ascii", "秘密", 0, 1, "PRIVATE_ERROR_TEXT")
+        with mock.patch("cli.report", side_effect=error):
+            status = self.run_cli(["generate", "--message", self.message_file])
+        self.assertEqual(status, 1)
+        self.generate.assert_called_once()
+        self.assertEqual(self.logged.count("Cannot write the output"), 1)
+        self.assertIn("UnicodeEncodeError", self.logged)
+        for stream in (self.logged, self.printed, self.err.getvalue()):
+            self.assertNotIn("PRIVATE_ERROR_TEXT", stream)
+            self.assertNotIn("秘密", stream)
+
+
 class LogPrivacyTest(CliTestCase):
     """
     Guard the invariant that no text of a person's reaches the log.

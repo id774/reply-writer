@@ -50,6 +50,8 @@
 #  - Flask 3.x
 #
 #  Version History:
+#  v1.2 2026-11-09
+#       Distinguished reply delivery from input retention on error pages.
 #  v1.1 2026-09-21
 #       Centralized sanitized Web failure diagnostics and kept raw HTTP
 #       exception and request-path text out of logs.
@@ -186,6 +188,8 @@ def handle_known_error(error: ReplyWriterError):
         template,
         error=error.user_message,
         request_id=None if error.status_code == 400 else request_id,
+        input_retained=(request.method == "POST"
+                        and request.endpoint == "generate"),
         **_screen_values())
     return page, error.status_code
 
@@ -200,6 +204,7 @@ def handle_request_too_large(error: RequestEntityTooLarge):
         "error.html",
         error="The request is too large. Reduce its contents and try again.",
         request_id=request_id,
+        request_too_large=True,
         max_input_chars=config.max_input_chars,
         max_policy_chars=config.max_policy_chars,
     )
