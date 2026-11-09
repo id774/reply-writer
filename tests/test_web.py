@@ -438,6 +438,46 @@ class RefusalTest(WebTestCase):
         self.assertNotIn("SENSITIVE_EXCEPTION_TEXT", line)
 
 
+    def test_failure_page_distinguishes_api_transmission_from_reply_delivery(
+            self):
+        """ Say no reply was sent, and keep the typed input. """
+        for error, status in ((UpstreamConnectionError(), 502),
+                              (UpstreamTimeoutError(), 504)):
+            with self.subTest(status=status):
+                response = self.post(direction=DIRECTION, result=error)
+                page = response.get_data(as_text=True)
+                self.assertEqual(response.status_code, status)
+                self.assertIn("No reply was sent to the correspondent. "
+                              "What you pasted is still below.", page)
+                self.assertIn(MESSAGE, page)
+                self.assertIn(DIRECTION, page)
+                self.assertNotIn("Nothing was sent anywhere.", page)
+
+    def test_oversized_page_does_not_claim_input_was_restored(self):
+        """ Say the oversized input could not be restored. """
+        oversized = "あ" * (web.app.config["MAX_CONTENT_LENGTH"] + 1)
+        response = self.client.post("/generate", data={"message": oversized})
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("No reply was sent to the correspondent. "
+                      "The oversized input could not be restored on this "
+                      "page.", page)
+        self.assertNotIn("What you pasted is still below.", page)
+        self.assertNotIn(oversized[:100], page)
+
+    def test_routing_error_does_not_claim_input_was_restored(self):
+        """ Show the first sentence only for 404 and 405. """
+        for method, path, status in (("get", "/no-such-page", 404),
+                                     ("get", "/generate", 405)):
+            with self.subTest(status=status):
+                response = getattr(self.client, method)(path)
+                page = response.get_data(as_text=True)
+                self.assertEqual(response.status_code, status)
+                self.assertIn("No reply was sent to the correspondent.", page)
+                self.assertNotIn("What you pasted is still below.", page)
+                self.assertNotIn("could not be restored", page)
+
+
 class InvariantTest(WebTestCase):
     """
     Guard the invariants the requirements attach to the web layer.

@@ -272,7 +272,7 @@ A message or direction file that is not valid UTF-8 is refused before the genera
 | Exit code | Meaning |
 | ---: | --- |
 | 0 | The draft was generated. Also what `--help` and `--version` return. |
-| 1 | A setting or an option was refused, the message could not be read, or no usable draft came back. |
+| 1 | A setting or an option was refused, the message could not be read, the draft could not be printed, or no usable draft came back. |
 | 2 | The command line was rejected. |
 
 ## The writing policy
@@ -297,6 +297,8 @@ remain the only required placeholders, each exactly once.
 ## When something fails
 
 The screen shows a sentence the person can act on, and on a failure that is not theirs to fix, a request id. It never shows a traceback, the API token, the endpoint, the body of the API response or an internal path.
+
+An error never means a reply was sent to the correspondent. It does not prove that the generation API received no data: a generation request may already have reached the configured endpoint. For an oversized Web request rejected before form parsing, the error page cannot restore the original input.
 
 The log carries the other half: the request id, the backend, the host of the endpoint, the model, the HTTP status, the finish reason, the token counts, the elapsed seconds beside the limit, and the class of the error. A person reporting a fault quotes the request id, and the log is read at that id.
 

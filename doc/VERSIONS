@@ -1,6 +1,14 @@
 reply-writer Repository Version History
 =======================================
 
+v1.0.3 (Release Date: TBD)
+--------------------------
+- Clarify policy governance, pull request scope and automated agent workflows.
+- Reject surrounding whitespace in generation base URLs before API requests.
+- Report reply delivery and input restoration accurately on error pages.
+- Handle CLI draft output failures without exposing exception details.
+- Preserve sanitized request metadata for malformed generation API responses.
+
 v1.0.2 (2026-09-21)
 -------------------
 - Align CLI overrides with config.py's normalization: fix --model/--prompt-dir

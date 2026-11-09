@@ -409,10 +409,13 @@ The error screen never shows:
 - more of an internal URL than it has to
 - a traceback
 - the internals of a library
-- the body of the entered message
 - the whole response of the generation API
 
+The error explanation never includes the received message or direction. After a generation request has been parsed, the original values may appear only inside the input fields so the person can retry without pasting them again. When the HTTP request is rejected as oversized before form parsing, the values are not reconstructed on the error page.
+
 A fault stays traceable in the log by whoever runs the system, and the screen leaks nothing internal to the person.
+
+A generation error does not imply that the configured generation API received no data. The application never sends the drafted reply to the correspondent; this is distinct from sending the received message and direction to the configured generation API.
 
 ## 22. Retries and fallback
 

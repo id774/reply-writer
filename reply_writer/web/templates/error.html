@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<p>Nothing was sent anywhere. What you pasted is still below.</p>
+<p>No reply was sent to the correspondent.{% if input_retained %} What you pasted is still below.{% elif request_too_large %} The oversized input could not be restored on this page.{% endif %}</p>
 
 <form method="post" action="{{ url_for('generate') }}">
   <label for="message">Message you are replying to</label>

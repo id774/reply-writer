@@ -46,6 +46,7 @@
 #      Base URL of the endpoint, including the version path and without
 #      the resource name. Required, and https only, so that no message
 #      ever leaves for an endpoint nobody named.
+#      Any whitespace in the original value, including at either end, is rejected.
 #  - GENERATION_MODEL
 #      Model used for generation. Required; no default is shipped,
 #      because the available models differ per endpoint.
@@ -85,6 +86,8 @@
 #      explicitly instead of reading this setting.
 #
 #  Version History:
+#  v1.5 2026-11-09
+#       Rejected whitespace in raw generation base URL values.
 #  v1.4 2026-09-21
 #       Refused embedded whitespace anywhere in generation base URLs.
 #  v1.3 2026-09-12
@@ -270,7 +273,7 @@ def load_config() -> Config:
     return Config(
         generation_backend=_text("GENERATION_BACKEND", ""),
         generation_api_token=_text("GENERATION_API_TOKEN", ""),
-        generation_base_url=_text("GENERATION_BASE_URL", ""),
+        generation_base_url=os.environ.get("GENERATION_BASE_URL", ""),
         generation_model=_text("GENERATION_MODEL", ""),
         generation_response_mode=response_mode,
         generation_timeout=timeout,

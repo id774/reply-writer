@@ -196,5 +196,6 @@ That is why a person reporting a fault is asked for the request id shown on the 
 | Generation is stopped as too long | `GENERATION_TIMEOUT`, and the elapsed seconds in the journal beside it. A wait that ended well short of the limit is a connection lost, not a limit too low. |
 | The result cannot be read | `GENERATION_RESPONSE_MODE`, and whether the model keeps the JSON contract. Nothing is cut out of an answer that arrived wrapped in prose. |
 | An unexpected failure with a request id | The journal, at that id. |
+| An HTTP request is rejected as too large (413) | Reduce the submitted input and try again. The rejected form cannot be restored from the error page. |
 
 The application falls back to no second endpoint for any of these. One generation uses the one route the configuration names, which is what keeps it possible to say afterwards where a message went.

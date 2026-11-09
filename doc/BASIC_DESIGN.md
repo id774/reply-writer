@@ -425,6 +425,8 @@ never part of that diagnostic or of the mapped exception's chain: the mapped
 error is raised with `from None`. The success path is unaffected:
 `log_response()` still records the shape of an answer once it is accepted.
 
+When a response is received but its choice, finish reason or content is invalid, the provider raises InvalidResponseError with sanitized request metadata and the fixed local validation reason. No response body, prompt, credential or arbitrary upstream exception text is included; the entry point remains the single failure logger.
+
 ---
 
 ## 9. Choosing a provider
@@ -920,6 +922,8 @@ An error is classified inside the application and turned into something safe to 
 | an API timeout | 504 |
 | an invalid generated result | 502 |
 | an internal error | 500 |
+
+An error does not mean that the generation request never reached the configured API. No drafted reply is delivered to the correspondent. When a parsed generation request fails, the form values remain available in the error page's input fields for correction; an oversized HTTP body rejected before form parsing is not reconstructed. The error explanation itself contains no received message or direction.
 
 The person is never shown:
 

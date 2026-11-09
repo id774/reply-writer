@@ -33,6 +33,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.3 2026-11-09
+#       Added sanitized metadata to invalid-response diagnostics.
 #  v1.2 2026-09-21
 #       Required a usable finish reason, carried sanitized failure diagnostics
 #       and refused unknown response modes before a request.
@@ -76,7 +78,11 @@ class OpenAICompatibleProvider:
         # had, and the one to compare against GENERATION_TIMEOUT.
         started = time.monotonic()
         response = self._create(client, request, config, started, request_id)
-        result = self._result(response, config)
+        try:
+            result = self._result(response, config)
+        except InvalidResponseError as error:
+            raise InvalidResponseError(self._invalid_response_diagnostic(
+                config, error.diagnostic, started, request_id)) from None
         result.elapsed_seconds = self._elapsed(started)
         log_response(config, result, request_id)
         return result
@@ -212,6 +218,29 @@ class OpenAICompatibleProvider:
             type(error).__name__,
             status_code if status_code is not None else "-",
             getattr(error, "request_id", None) or "-",
+            self._elapsed(started),
+            config.generation_timeout,
+        )
+
+    def _invalid_response_diagnostic(self, config: Config, reason: str,
+                                     started: float,
+                                     request_id: str) -> str:
+        """
+        Build a sanitized diagnostic for an unreadable answer.
+
+        The reason is the fixed local validation text raised by
+        _result(); no response body, prompt, credential or upstream
+        exception message is carried.
+        """
+        return (
+            "generation invalid response: request_id={0} backend={1} "
+            "endpoint_host={2} model={3} detail={4} elapsed={5} timeout={6}"
+        ).format(
+            request_id or "-",
+            config.generation_backend,
+            config.endpoint_host,
+            config.generation_model,
+            reason,
             self._elapsed(started),
             config.generation_timeout,
         )
