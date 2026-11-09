@@ -30,6 +30,8 @@
 #  - Standard library only; a provider module brings its own client
 #
 #  Version History:
+#  v1.2 2026-11-09
+#       Kept untrusted response metadata out of success logs.
 #  v1.1 2026-09-21
 #       Left provider-selection failure logging to the entry point.
 #  v1.0 2026-08-10
@@ -118,6 +120,13 @@ def build_provider(config: Config) -> GenerationProvider:
     return loader()()
 
 
+def _log_count(value: object) -> Optional[int]:
+    """ Return a usage count that is safe to log, or None. """
+    if type(value) is int and 0 <= value <= 9223372036854775807:
+        return value
+    return None
+
+
 def log_response(config: Config, result: CompletionResult,
                  request_id: str) -> None:
     """
@@ -133,7 +142,14 @@ def log_response(config: Config, result: CompletionResult,
     timeout that follows it, seen one moment earlier, and only a log
     that records the successful ones can show that the margin was
     already gone.
+
+    Whatever the endpoint or its SDK supplied as a string is untrusted
+    and is not passed to the log: the model is the configured one, the
+    finish reason is reduced to 'stop' or 'other', the upstream request
+    id is reduced to its presence, and a usage count is logged only
+    when it is a bounded nonnegative integer.
     """
+    upstream_id = result.upstream_request_id
     logger.info(
         "generation response: request_id=%s backend=%s endpoint_host=%s "
         "upstream_request_id=%s model=%s finish_reason=%s prompt_tokens=%s "
@@ -141,12 +157,12 @@ def log_response(config: Config, result: CompletionResult,
         request_id or "-",
         config.generation_backend,
         config.endpoint_host,
-        result.upstream_request_id or "-",
-        result.model or "-",
-        result.finish_reason or "-",
-        result.prompt_tokens,
-        result.completion_tokens,
-        result.total_tokens,
+        "present" if isinstance(upstream_id, str) and upstream_id else "-",
+        config.generation_model or "-",
+        "stop" if result.finish_reason == "stop" else "other",
+        _log_count(result.prompt_tokens),
+        _log_count(result.completion_tokens),
+        _log_count(result.total_tokens),
         result.elapsed_seconds if result.elapsed_seconds is not None else "-",
         config.generation_timeout,
     )

@@ -36,6 +36,8 @@
 #  - Standard library only; the provider brings the client
 #
 #  Version History:
+#  v1.2 2026-11-09
+#       Classified excessive JSON nesting as an invalid response.
 #  v1.1 2026-09-21
 #       Matched input limits to textarea length, carried safe diagnostics and
 #       rejected non-standard JSON constants.
@@ -136,7 +138,7 @@ def _payload(content: str, response_mode: str) -> Dict[str, Any]:
             text,
             parse_constant=_reject_nonstandard_json_constant,
         )
-    except ValueError:
+    except (ValueError, RecursionError):
         # The answer itself, and the parser's own message, stay out of
         # the diagnostic: what is useful is that it was not JSON.
         raise InvalidResponseError("answer is not readable as JSON") from None

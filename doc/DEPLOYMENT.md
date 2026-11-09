@@ -180,7 +180,7 @@ The prompts are read from disk on every generation, so adjusting one takes effec
 
 ## What the log holds
 
-The journal carries the shape of each exchange and none of its content: the request id, the backend, the host of the endpoint, the model, the finish reason, the token counts, the elapsed seconds beside the limit, and the class of any error.
+The journal carries the shape of each exchange and none of its content: the application request id, backend, endpoint host, configured model, a validated HTTP status, a fixed `stop`/`other` completion-reason class, bounded nonnegative integer token counts, upstream request-id presence, elapsed seconds beside the timeout, and the class of any error. No free-form upstream response metadata is logged.
 
 It never carries the received message, the direction, the generated reply, the assembled prompts, the API token or the `Authorization` header — at any log level. Raising `LOG_LEVEL` reveals no text of anybody's, and there is no setting that turns it back on.
 

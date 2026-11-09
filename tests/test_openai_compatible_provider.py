@@ -527,6 +527,27 @@ class FailureTest(ProviderTestCase):
         self.assertIsNotNone(sdk.request)
 
 
+    def test_masks_sdk_request_id_and_invalid_status_in_diagnostic(self):
+        """ Keep raw upstream ids and odd statuses out of the diagnostic. """
+        error = FakeStatusError("PRIVATE_EXCEPTION_MESSAGE", status_code=503)
+        error.request_id = "PRIVATE_ERROR_UPSTREAM_ID"
+        failed = self.fail_with(error)
+        self.assertIsInstance(failed, UpstreamStatusError)
+        self.assertIn("status=503", failed.diagnostic)
+        self.assertIn("upstream_request_id=present", failed.diagnostic)
+        self.assertNotIn("PRIVATE_ERROR_UPSTREAM_ID", failed.diagnostic)
+        self.assertNotIn("PRIVATE_EXCEPTION_MESSAGE", failed.diagnostic)
+        self.assertIsNotNone(self.sdk.request)
+
+        odd = FakeStatusError("PRIVATE_EXCEPTION_MESSAGE",
+                              status_code="PRIVATE_STATUS_STRING")
+        failed = self.fail_with(odd)
+        self.assertIn("status=-", failed.diagnostic)
+        self.assertNotIn("PRIVATE_STATUS_STRING", failed.diagnostic)
+        self.assertNotIn("PRIVATE_EXCEPTION_MESSAGE", failed.diagnostic)
+        self.assertIsNotNone(self.sdk.request)
+
+
 class LogTest(ProviderTestCase):
     """ Cover what a log line carries, and what it must never carry. """
 
@@ -538,11 +559,67 @@ class LogTest(ProviderTestCase):
 
         self.assertIn("backend=openai-compatible", line)
         self.assertIn("endpoint_host=api.example.test", line)
-        self.assertIn("model=answering-model", line)
+        self.assertIn("model=configured-model", line)
         self.assertIn("total_tokens=33", line)
         self.assertNotIn(TOKEN, line)
         self.assertNotIn(REPLY, line)
         self.assertNotIn(MESSAGES[1]["content"], line)
+
+    def test_refuses_upstream_string_metadata_in_success_log(self):
+        """ Keep free-form upstream strings out of the success log. """
+        markers = ("PRIVATE_MODEL_TEXT", "PRIVATE_FINISH_TEXT",
+                   "PRIVATE_UPSTREAM_ID_TEXT", "PRIVATE_PROMPT_COUNT")
+        usage = SimpleNamespace(prompt_tokens="PRIVATE_PROMPT_COUNT",
+                                completion_tokens=True, total_tokens=-1)
+        sdk = FakeSDK(answer(model="PRIVATE_MODEL_TEXT",
+                             finish_reason="PRIVATE_FINISH_TEXT",
+                             identifier="PRIVATE_UPSTREAM_ID_TEXT",
+                             usage=usage))
+        with self.assertLogs("reply_writer.providers", "INFO") as recorded:
+            result = self.complete(sdk)
+        line = "\n".join(recorded.output)
+        self.assertEqual(result.model, "PRIVATE_MODEL_TEXT")
+        self.assertEqual(result.finish_reason, "PRIVATE_FINISH_TEXT")
+        self.assertEqual(result.upstream_request_id, "PRIVATE_UPSTREAM_ID_TEXT")
+        self.assertEqual(result.prompt_tokens, "PRIVATE_PROMPT_COUNT")
+        self.assertIs(result.completion_tokens, True)
+        self.assertEqual(result.total_tokens, -1)
+        self.assertIn("model=configured-model", line)
+        self.assertIn("finish_reason=other", line)
+        self.assertIn("upstream_request_id=present", line)
+        for count in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            self.assertIn(count + "=None", line)
+        for marker in markers:
+            self.assertNotIn(marker, line)
+        self.assertIsNotNone(sdk.request)
+
+        with self.subTest(case="multibyte and line breaks"):
+            sdk = FakeSDK(answer(model="PRIVATE_秘密\nMODEL",
+                                 finish_reason="PRIVATE_日本語\nFINISH",
+                                 identifier="PRIVATE_機密\nID"))
+            with self.assertLogs("reply_writer.providers", "INFO") as again:
+                self.complete(sdk)
+            line = "\n".join(again.output)
+            for raw in ("PRIVATE", "秘密", "日本語", "機密"):
+                self.assertNotIn(raw, line)
+            self.assertEqual(len(again.output), 1)
+            self.assertIn("model=configured-model", line)
+            self.assertIn("finish_reason=other", line)
+            self.assertIn("upstream_request_id=present", line)
+
+        with self.subTest(case="ordinary values"):
+            sdk = FakeSDK(answer(identifier=""))
+            with self.assertLogs("reply_writer.providers", "INFO") as normal:
+                self.complete(sdk)
+            line = "\n".join(normal.output)
+            self.assertIn("finish_reason=stop", line)
+            self.assertIn("upstream_request_id=-", line)
+            self.assertIn("prompt_tokens=11", line)
+            self.assertIn("completion_tokens=22", line)
+            self.assertIn("total_tokens=33", line)
+            self.assertNotIn(TOKEN, line)
+            self.assertNotIn(REPLY, line)
+            self.assertNotIn(MESSAGES[1]["content"], line)
 
     def test_records_the_request_id_of_the_generation(self):
         """ Let one generation be followed by the id the web layer gave. """

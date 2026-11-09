@@ -323,6 +323,11 @@ the configured generation API
   and end of processing, the backend, the endpoint host, the model, the HTTP
   status, the class of error, the elapsed time and whether the generation
   succeeded.
+- API-provided response fields and SDK error metadata are untrusted. Never log
+  free-form upstream model names, finish reasons or request identifiers. Log
+  the configured model, a fixed completion-reason class, the presence of an
+  upstream request id, and bounded nonnegative integer usage counts instead.
+  An SDK HTTP status is logged only when it is an integer from 100 to 599.
 - What is never recorded, at any level, is the received message, the direction,
   the assembled prompts, the generated reply, the body of the API response, the
   API token and the `Authorization` header.
@@ -355,9 +360,12 @@ the configured generation API
   each maps to, are fixed by the basic design. The mapping is written in one
   place, so that a route cannot invent a status of its own.
 - The person is shown a sentence they can act on and, where it helps, the
-  request id. They are never shown a traceback, the string of a Python
-  exception, an internal path, the internals of a library, the API token, the
-  body of the API response or the text they entered.
+  request id. The error explanation never includes the text they entered.
+  After a parsed generation request fails, the original message and direction
+  remain only in the retry form's input fields; an oversized request rejected
+  before parsing is not reconstructed. A traceback, a Python exception's
+  message, an internal path, library internals, the API token and the API
+  response body never appear in the error explanation.
 - Exit code semantics follow the usual UNIX/Linux conventions and stay
   consistent across the repository.
 

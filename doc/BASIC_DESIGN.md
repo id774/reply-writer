@@ -263,6 +263,10 @@ the documented exception: an unknown level name is accepted and logging uses
 `INFO`, so a misspelled diagnostic level does not prevent the process from
 reporting other configuration failures.
 
+Whole-number settings are parsed from the original decimal text without
+floating-point rounding. The existing finite-number check and accepted
+integer notations remain, while fractional values are refused exactly.
+
 ### 8.4 `reply_writer/__init__.py`
 
 Holds the data types shared across the package, and the version.
@@ -362,6 +366,10 @@ object, a missing or malformed body, a malformed subject — raises
 these it was, rather than logging the failure at this layer. The generated
 answer itself is never part of that diagnostic.
 
+Excessive JSON nesting is rejected as an invalid generated result, with the
+same sanitized diagnostic and HTTP 502 mapping as unreadable JSON. It is not
+classified as an internal server failure.
+
 ### 8.8 `reply_writer/formatter.py`
 
 Mechanical post processing that changes no meaning:
@@ -418,7 +426,7 @@ This layer raises an SDK failure, an unknown output-token parameter, a
 missing `openai` package, or an invalid response, as one of
 `reply_writer.errors`'s classes carrying a sanitized `diagnostic` — the
 backend, the endpoint host, the model, the exception class, the HTTP status,
-the upstream request id, the elapsed seconds and the configured timeout,
+whether an upstream request id was present, the elapsed seconds and the configured timeout,
 where they apply — rather than logging the failure itself. The upstream
 exception's own message, which an SDK may build from the response body, is
 never part of that diagnostic or of the mapped exception's chain: the mapped
@@ -426,6 +434,14 @@ error is raised with `from None`. The success path is unaffected:
 `log_response()` still records the shape of an answer once it is accepted.
 
 When a response is received but its choice, finish reason or content is invalid, the provider raises InvalidResponseError with sanitized request metadata and the fixed local validation reason. No response body, prompt, credential or arbitrary upstream exception text is included; the entry point remains the single failure logger.
+
+On success, `log_response()` records the configured model rather than an
+untrusted model name returned by the endpoint. A successful finish reason is
+logged as `stop` or `other`; an upstream request id is represented only by
+`present` or `-`; token counts are recorded only as nonnegative integers
+within the signed 64-bit range. Raw upstream strings and invalid usage
+metadata never reach application logs. The normalized result returned to
+the generation core is unchanged.
 
 ---
 
@@ -882,6 +898,11 @@ What is not:
 - an unexpected exception's own message text
 
 A fault is diagnosed without any of the text being kept.
+
+Raw string metadata supplied by the generation API or its SDK is not trusted
+as log-safe text. Success and failure logs use locally configured identifiers,
+fixed labels and validated numeric fields; only the presence of the upstream
+request identifier is recorded, never its value.
 
 Ownership of the failure log is single: the provider, the generation core and
 the prompt layer never log a failure themselves, they raise with a sanitized
