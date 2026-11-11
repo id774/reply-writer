@@ -27,7 +27,7 @@
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - Standard library only; a provider module brings its own client
+#  - Standard library only. A provider module brings its own client
 #
 #  Version History:
 #  v1.2 2026-11-09
@@ -110,7 +110,7 @@ def build_provider(config: Config) -> GenerationProvider:
     Raises:
         InternalError: The backend is unknown.
             config.validate_generation_config() refuses that earlier
-            and with a better message; reaching here means the two
+            and with a better message. Reaching here means the two
             lists disagree, which is a fault of this repository and not
             of the operator.
     """

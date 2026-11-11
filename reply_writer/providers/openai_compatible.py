@@ -6,7 +6,7 @@
 #
 #  Description:
 #  This module speaks the OpenAI compatible Chat Completions API
-#  through the openai package. The package is the client; it is not the
+#  through the openai package. The package is the client. It is not the
 #  choice of an endpoint. Which service answers is decided by
 #  GENERATION_BASE_URL alone, and that value is always passed to the
 #  SDK, so the default URL compiled into the client can never be
@@ -20,7 +20,7 @@
 #
 #  The answer is normalized into a CompletionResult and nothing else is
 #  read from it. Metadata a compatible endpoint may omit — the usage
-#  counts, the request id — is carried as it comes; only an answer with
+#  counts, the request id — is carried as it comes. Only an answer with
 #  no usable text, or one cut off by the output limit, is refused.
 #
 #  Author: id774 (More info: https://id774.net)
@@ -70,7 +70,7 @@ def _without_retry_override(response: Any) -> None:
 
     The SDK retries any answer carrying 'x-should-retry: true', whatever
     its status. A 3xx must stay a refusal, so the header is dropped from
-    it before the SDK reads it; every other status is left alone, and
+    it before the SDK reads it. Every other status is left alone, and
     the retries the operator configured apply to them as before.
     """
     if 300 <= response.status_code < 400:
@@ -88,7 +88,7 @@ class OpenAICompatibleProvider:
             return self._complete(client, messages, config, request_id)
         finally:
             # The client owns the connection pool built for this one
-            # call; it is released whether the call succeeded or not.
+            # call. It is released whether the call succeeded or not.
             client.close()
 
     def _complete(self, client: Any, messages: List[Dict[str, str]],
@@ -122,7 +122,7 @@ class OpenAICompatibleProvider:
 
         # base_url is passed unconditionally. An empty value would let
         # the SDK fall back to its own endpoint, which is the one thing
-        # this design refuses to allow; config.py has already rejected
+        # this design refuses to allow. config.py has already rejected
         # that case, and this keeps the guarantee local as well.
         #
         # The SDK's own HTTP client follows redirects, and a 307 or a
@@ -154,7 +154,7 @@ class OpenAICompatibleProvider:
 
         # The wire field GENERATION_OUTPUT_TOKEN_PARAMETER selects. The
         # else branch is not reachable through load_config(), which
-        # already refuses any other value; it guards a Config built by
+        # already refuses any other value. It guards a Config built by
         # hand from ever being sent as max_completion_tokens by mistake.
         if config.generation_output_token_parameter == "max_tokens":
             request["max_tokens"] = config.max_output_tokens
@@ -179,7 +179,7 @@ class OpenAICompatibleProvider:
         # error, and retrying with the other would spend a second
         # request the person never asked for. The else branch is not
         # reachable through load_config(), which already refuses any
-        # other value; it guards a Config built by hand from being read
+        # other value. It guards a Config built by hand from being read
         # as prompt-json by default instead of being refused.
         if config.generation_response_mode == "json-object":
             request["response_format"] = {"type": "json_object"}
@@ -270,7 +270,7 @@ class OpenAICompatibleProvider:
         Build a sanitized diagnostic for an unreadable answer.
 
         The reason is the fixed local validation text raised by
-        _result(); no response body, prompt, credential or upstream
+        _result(). No response body, prompt, credential or upstream
         exception message is carried.
         """
         return (
@@ -309,7 +309,7 @@ class OpenAICompatibleProvider:
         # rather than assumed to mean an ordinary stop: an endpoint
         # that leaves this out has told us nothing about whether the
         # answer is complete. An unknown but non-empty reason is not
-        # guessed at either; it is kept, on the chance that a
+        # guessed at either. It is kept, on the chance that a
         # compatible endpoint uses a name of its own for an ordinary
         # stop.
         raw_finish_reason = getattr(choice, "finish_reason", None)

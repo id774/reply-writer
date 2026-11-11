@@ -33,7 +33,7 @@
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
-#  - Standard library only; the provider brings the client
+#  - Standard library only. The provider brings the client
 #
 #  Version History:
 #  v1.2 2026-11-09

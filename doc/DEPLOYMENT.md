@@ -1,14 +1,24 @@
 # Deployment
 
-`reply-writer` runs as a small web application on a server: gunicorn behind Apache, managed by systemd, reachable over HTTPS from a phone.
+`reply-writer` runs as a small web application on a server: gunicorn behind
+Apache, managed by systemd, reachable over HTTPS from a phone.
 
-This document is the whole of what installing and running it takes. The composition it follows is fixed by [`BASIC_DESIGN.md`](BASIC_DESIGN.md) sections 3 to 6 and 29 to 31; the settings are listed in [`../.env.example`](../.env.example) and in the README.
+This document is the whole of what installing and running it takes. The
+composition it follows is fixed by [`BASIC_DESIGN.md`](BASIC_DESIGN.md) sections
+3 to 6 and 29 to 31. The settings are listed in
+[`../.env.example`](../.env.example) and in the README.
 
-Nothing in this repository carries a hostname, a certificate or a credential of any environment. The examples under `deploy/` are examples, and the values in them are replaced.
+Nothing in this repository carries a hostname, a certificate or a credential of
+any environment. The examples under `deploy/` are examples, and the values in
+them are replaced.
 
 ## What it will and will not touch
 
-The only host the application contacts is the generation endpoint `GENERATION_BASE_URL` names. It holds no credential of Gmail, Outlook, LINE or any other messaging service, opens no connection to one, and sends nothing anywhere on its own. Whoever deploys it is not being asked to provide a mail account.
+The only host the application contacts is the generation endpoint
+`GENERATION_BASE_URL` names. It holds no credential of Gmail, Outlook, LINE or
+any other messaging service, opens no connection to one, and sends nothing
+anywhere on its own. Whoever deploys it is not being asked to provide a mail
+account.
 
 ## Before you begin
 
@@ -16,7 +26,8 @@ The only host the application contacts is the generation endpoint `GENERATION_BA
 - Python 3.9 or later.
 - Apache with `proxy`, `proxy_http`, `headers` and `ssl` enabled.
 - A certificate for the host, from whatever the environment already uses.
-- An account with the generation endpoint, and its token, base URL and model name.
+- An account with the generation endpoint, and its token, base URL and model
+  name.
 
 ## Install the service
 
@@ -44,7 +55,7 @@ sudoedit -u reply /opt/reply-writer/.env
 ```
 
 Four of them are required and have no runtime defaults. `.env.example` already
-supplies the only supported backend name; the API token, base URL and model
+supplies the only supported backend name. The API token, base URL and model
 remain blank and have to be filled in before generation can start:
 
 ```text
@@ -54,9 +65,12 @@ GENERATION_BASE_URL
 GENERATION_MODEL
 ```
 
-That refusal is the design working. A message that leaves for an endpoint nobody named is worse than an application that will not start, so no setting falls back to a service of its own.
+That refusal is the design working. A message that leaves for an endpoint nobody
+named is worse than an application that will not start, so no setting falls back
+to a service of its own.
 
-`.env` holds the API token, so it stays readable by the service user alone. It is listed in `.gitignore` and is never committed.
+`.env` holds the API token, so it stays readable by the service user alone. It
+is listed in `.gitignore` and is never committed.
 
 Check the installation before anything is published:
 
@@ -64,7 +78,8 @@ Check the installation before anything is published:
 sudo -u reply .venv/bin/python -m unittest discover -s tests
 ```
 
-The suite makes no request and needs no token. A pass says the installation is sound; only an actual generation says the endpoint is reachable.
+The suite makes no request and needs no token. A pass says the installation is
+sound. Only an actual generation says the endpoint is reachable.
 
 ## Start the application
 
@@ -77,9 +92,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now reply-writer
 ```
 
-Adjust the user, the paths and the port in the unit before enabling it. It starts by itself after a reboot.
+Adjust the user, the paths and the port in the unit before enabling it. It
+starts by itself after a reboot.
 
-The unit binds `127.0.0.1:8091` explicitly; it does not read `PORT` from
+The unit binds `127.0.0.1:8091` explicitly. It does not read `PORT` from
 `.env` for that bind. The Apache example proxies to the same explicit port.
 If the production port is changed, edit both the service-unit bind and the
 Apache proxy target to the same value.
@@ -90,15 +106,19 @@ sudo systemctl restart reply-writer
 sudo journalctl -u reply-writer -f
 ```
 
-gunicorn listens on `127.0.0.1:8091` and is never exposed to the internet. Check it locally:
+gunicorn listens on `127.0.0.1:8091` and is never exposed to the internet. Check
+it locally:
 
 ```bash
 curl -s http://127.0.0.1:8091/healthz
 ```
 
-`/healthz` answers as the web application and does nothing else. It calls no API, so it says the process is up and says nothing about the endpoint.
+`/healthz` answers as the web application and does nothing else. It calls no
+API, so it says the process is up and says nothing about the endpoint.
 
-A worker that cannot address an endpoint refuses to start, and the journal carries a line naming the setting at fault. That is where to look first when the service will not come up.
+A worker that cannot address an endpoint refuses to start, and the journal
+carries a line naming the setting at fault. That is where to look first when the
+service will not come up.
 
 ## Configure Apache and TLS
 
@@ -110,7 +130,8 @@ sudo a2ensite reply-writer
 sudo apachectl configtest && sudo systemctl reload apache2
 ```
 
-Replace the `ServerName` and the certificate paths with those of the environment.
+Replace the `ServerName` and the certificate paths with those of the
+environment.
 
 The application is published under `/reply/`:
 
@@ -120,19 +141,30 @@ https://<host>/reply/
 http://127.0.0.1:8091/
 ```
 
-It listens at its own root, so `X-Forwarded-Prefix` is what tells it the path it is published under, and its links and form actions come back through the same prefix. The header is set by Apache on every request, so a value from outside cannot survive it. Publishing at the root instead means dropping both the header and the `RedirectMatch`, and proxying `/` straight through.
+It listens at its own root, so `X-Forwarded-Prefix` is what tells it the path it
+is published under, and its links and form actions come back through the same
+prefix. The header is set by Apache on every request, so a value from outside
+cannot survive it. Publishing at the root instead means dropping both the header
+and the `RedirectMatch`, and proxying `/` straight through.
 
 ## Restrict access
 
-Private correspondence passes through this system, so it is not published to anyone who finds the address.
+Private correspondence passes through this system, so it is not published to
+anyone who finds the address.
 
-Access control belongs to the web server, and any of these serves: Basic authentication, an IP restriction, a VPN, or whatever the environment already uses. The commented blocks in `deploy/reply-writer.conf` show the first two.
+Access control belongs to the web server, and any of these serves: Basic
+authentication, an IP restriction, a VPN, or whatever the environment already
+uses. The commented blocks in `deploy/reply-writer.conf` show the first two.
 
-No account system is introduced into the application for this, and in particular no account belonging to a messaging service. Being usable from a phone away from a desk and being unusable by a stranger hold together, and they hold together in front of the application.
+No account system is introduced into the application for this, and in particular
+no account belonging to a messaging service. Being usable from a phone away from
+a desk and being unusable by a stranger hold together, and they hold together in
+front of the application.
 
 ## The timeouts
 
-A generation API answers more slowly than ordinary web traffic, so the limits widen from the inside outwards:
+A generation API answers more slowly than ordinary web traffic, so the limits
+widen from the inside outwards:
 
 | Layer | Setting | Value |
 | --- | --- | ---: |
@@ -144,26 +176,40 @@ A generation API answers more slowly than ordinary web traffic, so the limits wi
 GENERATION_TIMEOUT  <  gunicorn --timeout  <  Apache ProxyTimeout
 ```
 
-The three are different kinds of timeout, and the order is a relation between numbers, not one deadline:
+The three are different kinds of timeout, and the order is a relation between
+numbers, not one deadline:
 
-- `GENERATION_TIMEOUT` is the SDK's HTTP timeout. It bounds each connect, write, read and pool wait separately, and the read wait is the time between chunks of the answer, so a response that keeps arriving can take longer than 120 seconds.
+- `GENERATION_TIMEOUT` is the SDK's HTTP timeout. It bounds each connect, write,
+  read and pool wait separately, and the read wait is the time between chunks of
+  the answer, so a response that keeps arriving can take longer than 120
+  seconds.
 - gunicorn's `--timeout` is how long a worker may stay silent.
 - Apache's `ProxyTimeout` is a network timeout on the proxy connection.
 
-None of them is a limit on the whole request. The application is therefore not guaranteed to answer with a 504 within 120 seconds, and which layer gives up first is not guaranteed. If gunicorn or Apache ends the exchange first, the person is shown the proxy's or the server's error instead of the application's 504, and the log may show a generation that succeeded into a connection nobody was left holding.
+None of them is a limit on the whole request. The application is therefore not
+guaranteed to answer with a 504 within 120 seconds, and which layer gives up
+first is not guaranteed. If gunicorn or Apache ends the exchange first, the
+person is shown the proxy's or the server's error instead of the application's
+504, and the log may show a generation that succeeded into a connection nobody
+was left holding.
 
-Retries and their backoff add to the total time, and no simple worst case can be computed from `GENERATION_TIMEOUT` and the number of retries. `GENERATION_MAX_RETRIES` is 0 by default: one action by the person is one request. Raising it means revisiting the outer limits as well.
+Retries and their backoff add to the total time, and no simple worst case can be
+computed from `GENERATION_TIMEOUT` and the number of retries.
+`GENERATION_MAX_RETRIES` is 0 by default: one action by the person is one
+request. Raising it means revisiting the outer limits as well.
 
 ## Verify the complete path
 
 From a phone, or from anything with a browser:
 
-1. Open `https://<host>/reply/` and pass whatever access control is in front of it.
+1. Open `https://<host>/reply/` and pass whatever access control is in front of
+   it.
 2. Paste a message into the first field. Leave the direction empty.
 3. Generate a draft.
 4. Copy the reply.
 
-That is the whole path the system is for. If it works from a phone on a mobile network, the deployment is done.
+That is the whole path the system is for. If it works from a phone on a mobile
+network, the deployment is done.
 
 ## Routine operations
 
@@ -182,15 +228,28 @@ sudo -u reply .venv/bin/python -m unittest discover -s tests
 sudo systemctl restart reply-writer
 ```
 
-The prompts are read from disk on every generation, so adjusting one takes effect on the next generation. Replacing the files while the service runs is still followed by a restart, so that no request lands halfway through the change.
+The prompts are read from disk on every generation, so adjusting one takes
+effect on the next generation. Replacing the files while the service runs is
+still followed by a restart, so that no request lands halfway through the
+change.
 
 ## What the log holds
 
-The journal carries the shape of each exchange and none of its content: the application request id, backend, endpoint host, configured model, a validated HTTP status, a fixed `stop`/`other` completion-reason class, bounded nonnegative integer token counts, upstream request-id presence, elapsed seconds beside the timeout, and the class of any error. No free-form upstream response metadata is logged.
+The journal carries the shape of each exchange and none of its content: the
+application request id, backend, endpoint host, configured model, a validated
+HTTP status, a fixed `stop`/`other` completion-reason class, bounded nonnegative
+integer token counts, upstream request-id presence, elapsed seconds beside the
+timeout, and the class of any error. No free-form upstream response metadata is
+logged.
 
-It never carries the received message, the direction, the generated reply, the assembled prompts, the API token or the `Authorization` header — at any log level. Raising `LOG_LEVEL` reveals no text of anybody's, and there is no setting that turns it back on.
+It never carries the received message, the direction, the generated reply, the
+assembled prompts, the API token or the `Authorization` header — at any log
+level. Raising `LOG_LEVEL` reveals no text of anybody's, and there is no setting
+that turns it back on.
 
-That is why a person reporting a fault is asked for the request id shown on the error page rather than for what they were replying to. The id appears in the journal beside the failure, and nothing else has to be produced.
+That is why a person reporting a fault is asked for the request id shown on the
+error page rather than for what they were replying to. The id appears in the
+journal beside the failure, and nothing else has to be produced.
 
 ## When something fails
 
@@ -202,7 +261,9 @@ That is why a person reporting a fault is asked for the request id shown on the 
 | Generation is stopped as too long | `GENERATION_TIMEOUT`, the SDK's HTTP timeout, and the elapsed seconds in the journal beside it as context only: it is not a limit on the whole request, so the total elapsed time alone does not tell a slow endpoint from a lost connection. If gunicorn or Apache ended the exchange first, the application's 504 is not guaranteed and the proxy's or the server's own error may be shown. |
 | The result cannot be read | `GENERATION_RESPONSE_MODE`, and whether the model keeps the JSON contract. Nothing is cut out of an answer that arrived wrapped in prose. |
 | An unexpected failure with a request id | The journal, at that id. |
-| The service reports an error although the endpoint is reachable by browser | The configured base URL may answer with a redirect. Redirects are never followed; the journal line carries the 3xx status. Configure the final address of the endpoint. |
+| The service reports an error although the endpoint is reachable by browser | The configured base URL may answer with a redirect. Redirects are never followed. The journal line carries the 3xx status. Configure the final address of the endpoint. |
 | An HTTP request is rejected as too large (413) | Reduce the submitted input and try again. The rejected form cannot be restored from the error page. |
 
-The application falls back to no second endpoint for any of these. One generation uses the one route the configuration names, which is what keeps it possible to say afterwards where a message went.
+The application falls back to no second endpoint for any of these. One
+generation uses the one route the configuration names, which is what keeps it
+possible to say afterwards where a message went.

@@ -51,7 +51,7 @@
 #      carrying the invalid byte or the source text in the diagnostic.
 #    - Keep the file name out of what the user is shown, and carry it
 #      in the diagnostic instead of logging it at this layer.
-#    - Log no failure at this layer; the entry point owns that log.
+#    - Log no failure at this layer. The entry point owns that log.
 #    - Refuse a user prompt missing {{message}} or {{direction}}.
 #    - Refuse a user prompt carrying either one more than once.
 #    - Refuse a user prompt carrying an unknown placeholder.
@@ -454,7 +454,7 @@ class ShippedPromptsTest(unittest.TestCase):
         The requirements forbid supplying an intention the input did not
         carry. The prompt used to tell the model it could say a missing
         answer "will follow" with no undertaking from the input to base
-        that on; it must now withhold that unless the direction already
+        that on. It must now withhold that unless the direction already
         carries it.
         """
         system = load_prompt("system.md", SHIPPED_PROMPTS)

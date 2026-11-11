@@ -412,7 +412,7 @@ class RefusalTest(WebTestCase):
         """
         Log the status only, never the exception's own description text.
 
-        werkzeug lets a RequestEntityTooLarge carry a description; that
+        werkzeug lets a RequestEntityTooLarge carry a description. That
         text is not something this application wrote, and it stays out
         of the log the same way any other exception's own message does.
         """

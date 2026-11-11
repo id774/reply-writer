@@ -10,7 +10,7 @@
 #  standard input, the overrides that name the setting they replace,
 #  and the refusals that happen before a request is spent. Standard
 #  input can be assigned to only one of the message and the direction
-#  in a single invocation; asking for both is refused.
+#  in a single invocation. Asking for both is refused.
 #
 #  Two of the cases are about the shape of the interface rather than
 #  its behaviour: --help and --version exit 0 without any setting, and
@@ -405,7 +405,7 @@ class OverrideTest(CliTestCase):
         """
         Fall back a blank or whitespace-only --prompt-dir to 'prompts'.
 
-        The loaded PROMPT_DIR is a custom directory; the explicit blank
+        The loaded PROMPT_DIR is a custom directory. The explicit blank
         override still unsets it, exactly as an unset PROMPT_DIR would
         fall back to the documented default.
         """
@@ -494,7 +494,7 @@ class FailureTest(CliTestCase):
         Report an unmapped exception without letting it escape as a traceback.
 
         Every exception reply_writer.errors maps is caught above this
-        one; anything else is unexpected. It is logged once, with the
+        one. Anything else is unexpected. It is logged once, with the
         exception's class and its traceback's stack frames, and its own
         message never reaches the log, standard error or a printed
         reply.

@@ -7,7 +7,7 @@
 #  Description:
 #  This test suite covers the two stages of configuration handling.
 #  load_config() converts the environment and refuses a value that is
-#  malformed on its own terms; validate_generation_config() refuses a
+#  malformed on its own terms. validate_generation_config() refuses a
 #  configuration that cannot address an endpoint. The suite also pins
 #  the documented defaults and the reading of a blank value as unset.
 #
