@@ -514,11 +514,20 @@ is quoted literally, because an English translation of it would match nothing.
 
 ## Not implemented
 
-By design, and not as a gap to be filled later: any connector to Gmail, Outlook,
-LINE or an SMS service. Fetching or sending messages. Registering a draft.
-Choosing a recipient. Browser automation. A database, a history or a session
-store. An account system. Learning from past replies. RAG. Web search. Analytics
-over message content. Scheduled or automatic sending.
+The following capabilities are excluded by design, not deferred for later:
+
+- Connectors to Gmail, Outlook, LINE or an SMS service
+- Fetching or sending messages
+- Registering a draft
+- Choosing a recipient
+- Browser automation
+- A database, a history or a session store
+- An account system
+- Learning from past replies
+- RAG
+- Web search
+- Analytics over message content
+- Scheduled or automatic sending
 
 Should one of them become necessary, the requirements change first and the
 design follows.
