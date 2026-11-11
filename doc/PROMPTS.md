@@ -38,7 +38,7 @@ This is enforced at generation time, against the prompt source read from disk
 and before it is substituted — the same for the shipped prompts and for a set
 selected through `PROMPT_DIR`. A `user.md` that omits `{{message}}` or
 `{{direction}}`, carries either one more than once, or carries any other
-`{{...}}` form is malformed; so is a `system.md` carrying any `{{...}}` form.
+`{{...}}` form is malformed. So is a `system.md` carrying any `{{...}}` form.
 A malformed set is refused before a generation request is spent.
 
 After the source passes that check, the prompt layer chooses one
@@ -119,7 +119,7 @@ The answer is one JSON object:
 | Field | Required | What it holds |
 | --- | --- | --- |
 | `body` | yes | The reply, and nothing else. |
-| `subject` | no | A subject where the medium has one; `null` where it does not. |
+| `subject` | no | A subject where the medium has one, `null` where it does not. |
 
 `subject` is `null` for LINE, SMS and ordinary chat, and a string for mail. An absent field reads the same as `null`, and a subject that is blank once its whitespace is folded is treated as no subject at all.
 

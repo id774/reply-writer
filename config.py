@@ -38,7 +38,7 @@
 #  Environment Variables:
 #  - GENERATION_BACKEND
 #      Wire protocol of the endpoint. Required. 'openai-compatible' is
-#      the only value this version accepts; an unknown one is refused
+#      the only value this version accepts. An unknown one is refused
 #      rather than coerced to a supported backend.
 #  - GENERATION_API_TOKEN
 #      API key or Bearer token of the endpoint. Required.
@@ -49,7 +49,7 @@
 #      Any whitespace in the original value, including at either end, is
 #      rejected.
 #  - GENERATION_MODEL
-#      Model used for generation. Required; no default is shipped,
+#      Model used for generation. Required. No default is shipped,
 #      because the available models differ per endpoint.
 #  - GENERATION_RESPONSE_MODE
 #      How a structured answer is asked for: 'json-object' sends
@@ -57,8 +57,8 @@
 #      Defaults to prompt-json.
 #  - GENERATION_TIMEOUT
 #      HTTP timeout, in seconds, handed to the SDK client. Defaults to
-#      120. It bounds each connect, write, read and pool wait separately;
-#      the read wait is the time between chunks of the answer, so it is
+#      120. It bounds each connect, write, read and pool wait separately.
+#      The read wait is the time between chunks of the answer, so it is
 #      not a limit on the whole request or on the whole generation, and
 #      SDK retries and backoff add to the total. Raising it means
 #      revisiting the gunicorn and Apache timeouts, which are different
@@ -330,8 +330,8 @@ def override_timeout(config: Config, raw_value: float) -> None:
     """
     Apply an explicit --timeout override, in place.
 
-    raw_value has already passed argparse's own float() conversion;
-    this holds it to the one rule GENERATION_TIMEOUT is validated by.
+    raw_value has already passed argparse's own float() conversion.
+    This holds it to the one rule GENERATION_TIMEOUT is validated by.
     """
     config.generation_timeout = _validate_timeout(raw_value, raw_value)
 

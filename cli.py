@@ -46,8 +46,8 @@
 #      this invocation, each held to the normalization and validation
 #      the setting follows when it comes from the environment: a blank
 #      or whitespace-only --model is unset, so a required GENERATION_MODEL
-#      that was missing stays missing; a blank or whitespace-only
-#      --prompt-dir is unset, so PROMPT_DIR falls back to its default;
+#      that was missing stays missing. A blank or whitespace-only
+#      --prompt-dir is unset, so PROMPT_DIR falls back to its default.
 #      --timeout must be a finite number greater than zero. The API
 #      token and the base URL have no option on purpose: the token is a
 #      secret, and the endpoint is a decision of the deployment.
@@ -205,7 +205,7 @@ def main() -> int:
 
     configure_logging(config.log_level)
 
-    # An option left unset changes nothing; an explicit value, blank or
+    # An option left unset changes nothing. An explicit value, blank or
     # not, is passed to config.py, which applies the same normalization
     # and validation a setting is held to when it comes from the
     # environment instead of from the command line.
@@ -251,13 +251,13 @@ def main() -> int:
         logger.error("Cannot read the input: the file is not valid UTF-8.")
         return 1
     except OSError as error:
-        # The exception class names the kind of failure; its own
+        # The exception class names the kind of failure. Its own
         # message may carry a path or a platform-specific string that
         # does not belong in the log.
         logger.error("Cannot read the input: %s.", type(error).__name__)
         return 1
     except Exception as error:
-        # Every mapped failure is caught above; anything left is
+        # Every mapped failure is caught above. Anything left is
         # unexpected. It is reported the same way app.py reports one:
         # a sanitized diagnostic built from the exception's class and
         # its traceback's stack frames, with no traceback reaching the

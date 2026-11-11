@@ -76,7 +76,7 @@
 #    - Record the request id of the generation on both lines.
 #    - Record the wait next to the limit on an answer and on a timeout.
 #    - Keep the token and the reply out of a failure diagnostic.
-#    - Log no failure at this layer; the entry point owns that log, and
+#    - Log no failure at this layer. The entry point owns that log, and
 #      the success path's response log is unaffected.
 #    - Raise InternalError for an unknown backend in build_provider(),
 #      without logging at the provider-registry layer either.
@@ -176,7 +176,7 @@ class FakeHttpClient:
 
     def __init__(self, **arguments):
         self.arguments = arguments
-        # The SDK's own default follows redirects; only an explicit
+        # The SDK's own default follows redirects. Only an explicit
         # argument turns that off.
         self.follow_redirects = arguments.get("follow_redirects", True)
 
@@ -282,7 +282,7 @@ class ClientTest(ProviderTestCase):
 
         An omitted base_url lets the SDK fall back to the endpoint
         compiled into it, which is the one thing this design refuses.
-        config.py rejects an empty value earlier; this keeps the
+        config.py rejects an empty value earlier. This keeps the
         guarantee local as well.
         """
         self.complete(settings=config(generation_base_url=""))
@@ -373,8 +373,8 @@ class RequestTest(ProviderTestCase):
         """
         Refuse a hand-built Config before spending a request on it.
 
-        load_config() already refuses an unknown GENERATION_RESPONSE_MODE;
-        this guards a Config built by hand from being read as prompt-json
+        load_config() already refuses an unknown GENERATION_RESPONSE_MODE.
+        This guards a Config built by hand from being read as prompt-json
         by default instead of being refused the same way the unknown
         output-token parameter is.
         """

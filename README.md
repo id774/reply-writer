@@ -23,13 +23,25 @@
 
 ## Overview
 
-**reply-writer** turns a received message into a draft reply. A person pastes in the mail or message they have to answer, adds a few lines of direction where they want the reply to say something in particular, and gets back a Japanese draft they can copy and send.
+**reply-writer** turns a received message into a draft reply. A person pastes in
+the mail or message they have to answer, adds a few lines of direction where
+they want the reply to say something in particular, and gets back a Japanese
+draft they can copy and send.
 
-Everyday correspondence is often answered adequately by a formulaic or half formulaic reply, and explaining to a language model, every time, how that reply should be written is most of the work. This system holds that explanation as its prompts, so what the person supplies is the message and — only where it is needed — the direction.
+Everyday correspondence is often answered adequately by a formulaic or half
+formulaic reply, and explaining to a language model, every time, how that reply
+should be written is most of the work. This system holds that explanation as its
+prompts, so what the person supplies is the message and — only where it is
+needed — the direction.
 
-It is not a mail client. Mail, LINE, SMS and chat are all just text that was copied from somewhere, and the reply goes back the same way: the person copies it, returns to the service the message came from, reads it once more and sends it. There is no code path to any messaging service and no place to hand it a credential. That is a line drawn in the design, not a feature left for later.
+It is not a mail client. Mail, LINE, SMS and chat are all just text that was
+copied from somewhere, and the reply goes back the same way: the person copies
+it, returns to the service the message came from, reads it once more and sends
+it. There is no code path to any messaging service and no place to hand it a
+credential. That is a line drawn in the design, not a feature left for later.
 
-The phone is the environment this is built for. Its main use is the few minutes away from a desk when a reply is owed.
+The phone is the environment this is built for. Its main use is the few minutes
+away from a desk when a reply is owed.
 
 ```text
 paste the message
@@ -45,31 +57,44 @@ read it once more and send it yourself
 
 ## What it does
 
-- Takes the body of a received message, from mail, LINE, SMS, chat or anything else whose text can be copied.
-- Takes an optional direction of a few lines: the intent, a constraint, the answer to give, what to mention, what to leave alone.
-- Produces a natural Japanese reply through a generation API named by the configuration.
-- Carries a subject where the medium has one, and leaves the field off the screen entirely where it does not.
-- Shows the draft so that it can be copied as it stands, with no remark or annotation from the model mixed into it.
+- Takes the body of a received message, from mail, LINE, SMS, chat or anything
+  else whose text can be copied.
+- Takes an optional direction of a few lines: the intent, a constraint, the
+  answer to give, what to mention, what to leave alone.
+- Produces a natural Japanese reply through a generation API named by the
+  configuration.
+- Carries a subject where the medium has one, and leaves the field off the
+  screen entirely where it does not.
+- Shows the draft so that it can be copied as it stands, with no remark or
+  annotation from the model mixed into it.
 - Invents no fact that the message and the direction did not carry.
-- Keeps what is entered and what is generated out of storage and out of the logs.
-- Offers the same generation from a command line, for adjusting the prompts and checking a connection.
+- Keeps what is entered and what is generated out of storage and out of the
+  logs.
+- Offers the same generation from a command line, for adjusting the prompts and
+  checking a connection.
 
 ## What it does not do
 
-- Send mail, a message, an SMS or a chat post — by any route, including a browser driven by the system.
+- Send mail, a message, an SMS or a chat post — by any route, including a
+  browser driven by the system.
 - Fetch messages, register drafts, choose recipients or touch an address book.
 - Hold a credential of Gmail, Outlook, LINE or any other messaging service.
 - Search the web or look anything up to fill a gap in the input.
-- Treat an instruction found inside a received message as an instruction to itself.
+- Treat an instruction found inside a received message as an instruction to
+  itself.
 - Fall back to a second generation endpoint when the first one fails.
 
-Checking the final text and sending it stay with the person. Section 13 of the requirements states the boundary, and section 33 lists what the initial version leaves out.
+Checking the final text and sending it stay with the person. Section 13 of the
+requirements states the boundary, and section 33 lists what the initial version
+leaves out.
 
 ## Requirements
 
 - Python 3.9 or later.
-- An account with an OpenAI-compatible Chat Completions endpoint, and its token, base URL and model name.
-- For a server deployment: Apache and systemd. See [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md).
+- An account with an OpenAI-compatible Chat Completions endpoint, and its token,
+  base URL and model name.
+- For a server deployment: Apache and systemd. See
+  [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md).
 
 Runtime dependencies, each pinned to a compatible range in `requirements.txt`:
 
@@ -80,7 +105,8 @@ Runtime dependencies, each pinned to a compatible range in `requirements.txt`:
 | openai | the OpenAI-compatible API client |
 | python-dotenv | reading `.env` |
 
-The `openai` package is the client. It is not the choice of an endpoint: which service answers is decided by `GENERATION_BASE_URL` alone.
+The `openai` package is the client. It is not the choice of an endpoint: which
+service answers is decided by `GENERATION_BASE_URL` alone.
 
 ## Installation
 
@@ -96,7 +122,7 @@ chmod 600 .env
 Then edit `.env`. The four required settings are identified in the
 [Configuration](#configuration) table and have no runtime defaults.
 `.env.example` already names the only supported backend,
-`openai-compatible`; the API token, base URL and model remain blank and
+`openai-compatible`. The API token, base URL and model remain blank and
 must be filled in before generation can start.
 
 Check the installation:
@@ -109,7 +135,9 @@ The suite makes no request and needs no token.
 
 ## Configuration
 
-Every setting is read from the environment, or from a `.env` file beside the application. None of them appears on a screen: they belong to whoever runs the system.
+Every setting is read from the environment, or from a `.env` file beside the
+application. None of them appears on a screen: they belong to whoever runs the
+system.
 
 | Variable | Required | Default | What it decides |
 | --- | :---: | --- | --- |
@@ -127,14 +155,16 @@ Every setting is read from the environment, or from a `.env` file beside the app
 | `MAX_POLICY_CHARS` | no | `2000` | Upper bound of the direction, counted the same way as `MAX_INPUT_CHARS`. |
 | `PROMPT_DIR` | no | `prompts` | Directory holding the prompt files. |
 | `LOG_LEVEL` | no | `INFO` | Level of the application log. An unknown name uses `INFO`. |
-| `PORT` | no | `8091` | Port of the Flask development server and the Procfile gunicorn command; the Procfile falls back to `8091` when `PORT` is unset. The systemd example binds explicitly to `8091`. |
+| `PORT` | no | `8091` | Port of the Flask development server and the Procfile gunicorn command. The Procfile falls back to `8091` when `PORT` is unset. The systemd example binds explicitly to `8091`. |
 
 ### Choosing an endpoint
 
 `GENERATION_BACKEND`, `GENERATION_API_TOKEN`, `GENERATION_BASE_URL`, and
 `GENERATION_MODEL` are the required settings listed above. Their runtime
-validation is implemented in `config.py`; this README documents how an
-operator supplies them. With one of them missing, the process refuses to start rather than picking a service for you, because a private message that leaves for an endpoint nobody named is worse than an application that will not run.
+validation is implemented in `config.py`. This README documents how an operator
+supplies them. With one of them missing, the process refuses to start rather
+than picking a service for you, because a private message that leaves for an
+endpoint nobody named is worse than an application that will not run.
 
 An unknown `GENERATION_BACKEND` is refused rather than coerced to a supported
 value. Accepted backend values are defined in `config.py` and documented in
@@ -159,7 +189,7 @@ the model name, the endpoint host or the base URL, and it never retries a
 failed request with the other field.
 
 **Kimi K3.** Kimi K3 is used through this same `openai-compatible`
-provider path; no Kimi-specific source code or backend is added for it.
+provider path. No Kimi-specific source code or backend is added for it.
 
 ```env
 GENERATION_BACKEND=openai-compatible
@@ -171,15 +201,15 @@ GENERATION_TEMPERATURE=
 GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens
 ```
 
-The base URL stops at `/v1`; do not write `/chat/completions`, since the
+The base URL stops at `/v1`. Do not write `/chat/completions`, since the
 SDK appends it itself. `GENERATION_RESPONSE_MODE=prompt-json` is used, so
 `response_format` is not required on this endpoint.
 `GENERATION_TEMPERATURE` is left empty, so nothing is sent for it.
 `GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens` follows the current
 Kimi Chat Completions parameter contract, where `max_tokens` is deprecated in
-favour of `max_completion_tokens`; no Kimi-specific provider code is needed.
+favour of `max_completion_tokens`. No Kimi-specific provider code is needed.
 Kimi K3 uses thinking by default and its response may carry a
-`reasoning_content` field; no Kimi-specific reasoning setting, storage,
+`reasoning_content` field. No Kimi-specific reasoning setting, storage,
 display, or logging is added here. As with any endpoint configured here,
 a failure on this one does not fall back to another.
 
@@ -196,23 +226,43 @@ the API token as a command-line option is unchanged as well.
 
 ### One action, one request
 
-`GENERATION_MAX_RETRIES` defaults to `0`, so one press of the generate button is one request to the endpoint. Raising it is an explicit operational decision; retries and their backoff add to how long one action can take, and no simple worst case can be computed from the timeout.
+`GENERATION_MAX_RETRIES` defaults to `0`, so one press of the generate button is
+one request to the endpoint. Raising it is an explicit operational decision.
+Retries and their backoff add to how long one action can take, and no simple
+worst case can be computed from the timeout.
 
-A failure is never a reason to try somewhere else. An unreachable host, a timeout, a rejected credential, a rate limit, a failure of the API itself and an unreadable answer are all reported on the route that was configured. For one generation, exactly one API receives what was entered. A redirect from the endpoint is not followed either, to the same host or to another: a 301, 302, 303, 307 or 308 answer is reported as an error from the API, and nothing entered is sent on to the address it names. An endpoint that only works through a redirect has to be configured at its final address.
+A failure is never a reason to try somewhere else. An unreachable host, a
+timeout, a rejected credential, a rate limit, a failure of the API itself and an
+unreadable answer are all reported on the route that was configured. For one
+generation, exactly one API receives what was entered. A redirect from the
+endpoint is not followed either, to the same host or to another: a 301, 302,
+303, 307 or 308 answer is reported as an error from the API, and nothing entered
+is sent on to the address it names. An endpoint that only works through a
+redirect has to be configured at its final address.
 
 ### Asking for JSON
 
-The answer is one JSON object, so that the subject and the body arrive as separate fields:
+The answer is one JSON object, so that the subject and the body arrive as
+separate fields:
 
 ```json
 {"subject": null, "body": "the reply body"}
 ```
 
-`prompt-json` asks for it in the prompt alone, which works with an endpoint or a model that rejects the parameter. `json-object` asks the API itself, with `response_format`.
+`prompt-json` asks for it in the prompt alone, which works with an endpoint or a
+model that rejects the parameter. `json-object` asks the API itself, with
+`response_format`.
 
-Neither mode falls back to the other. A configured mode that the endpoint does not support is an error, because retrying under the other would spend a second request nobody asked for.
+Neither mode falls back to the other. A configured mode that the endpoint does
+not support is an error, because retrying under the other would spend a second
+request nobody asked for.
 
-A response is accepted only where the endpoint reports a usable, non-empty `finish_reason`. A missing or blank one is refused rather than read as an ordinary stop, because an endpoint that leaves it out has said nothing about whether the answer is complete. `length` and `max_tokens` are refused as a truncated answer, as before; any other non-empty reason is accepted and carried through as the endpoint reported it, rather than guessed to mean a truncation.
+A response is accepted only where the endpoint reports a usable, non-empty
+`finish_reason`. A missing or blank one is refused rather than read as an
+ordinary stop, because an endpoint that leaves it out has said nothing about
+whether the answer is complete. `length` and `max_tokens` are refused as a
+truncated answer, as before. Any other non-empty reason is accepted and carried
+through as the endpoint reported it, rather than guessed to mean a truncation.
 
 ### Timeouts that agree with each other
 
@@ -241,7 +291,8 @@ timeouts.
 .venv/bin/python app.py
 ```
 
-It listens on `http://127.0.0.1:8091/`. In production gunicorn serves it behind Apache; see [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md).
+It listens on `http://127.0.0.1:8091/`. In production gunicorn serves it behind
+Apache. See [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md).
 
 | Route | What it does |
 | --- | --- |
@@ -257,11 +308,22 @@ message after parsing, and it applies to both the Web UI and the CLI. The CLI
 has no HTTP request-body limit.
 
 The input screen carries the message field, the optional direction field, and
-the generate button. The direction is marked optional and may be left empty, which is the ordinary case. Where the browser runs the page's script, the message and direction fields show a running character count, and so do the same two fields of the form that generates again on the result screen and of the retry form on a failure screen; submitting shows an immediate "Generating..." notice with the button disabled while the request is in flight; with script unavailable, the same POST to `/generate` still generates a draft. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
+the generate button. The direction is marked optional and may be left empty,
+which is the ordinary case. Where the browser runs the page's script, the
+message and direction fields show a running character count, and so do the same
+two fields of the form that generates again on the result screen and of the
+retry form on a failure screen. Submitting shows an immediate "Generating..."
+notice with the button disabled while the request is in flight. With script
+unavailable, the same POST to `/generate` still generates a draft. The result
+screen shows the reply with a copy control beside it, and the subject with a
+copy control of its own where the reply carries one. Where it carries none, the
+subject field is not on the page at all.
 
 ### From the command line
 
-The command line calls the same generation core, the same prompts and the same provider as the web application. It exists so that a prompt can be adjusted and an endpoint verified without a browser in the way.
+The command line calls the same generation core, the same prompts and the same
+provider as the web application. It exists so that a prompt can be adjusted and
+an endpoint verified without a browser in the way.
 
 ```bash
 python cli.py generate --message message.txt
@@ -273,11 +335,25 @@ python cli.py --help
 python cli.py --version
 ```
 
-The message and the direction are read from a file or from standard input, never from an argument. `-` may select standard input for either one, but not for both in the same invocation: the CLI has one input stream and no framing that could split it into two values. There is no option for the API token or the base URL, because a command line is readable by every user of the host.
+The message and the direction are read from a file or from standard input, never
+from an argument. `-` may select standard input for either one, but not for both
+in the same invocation: the CLI has one input stream and no framing that could
+split it into two values. There is no option for the API token or the base URL,
+because a command line is readable by every user of the host.
 
-A message or direction file that is not valid UTF-8 is refused before the generation core is reached, with a sentence naming the problem and no traceback; the invalid byte and the file's contents stay out of the log, the same way the prompt files are refused rather than decoded with replacement characters.
+A message or direction file that is not valid UTF-8 is refused before the
+generation core is reached, with a sentence naming the problem and no traceback.
+The invalid byte and the file's contents stay out of the log, the same way the
+prompt files are refused rather than decoded with replacement characters.
 
-`--model`, `--prompt-dir` and `--timeout` each replace the setting they name, for one run. An option left out changes nothing; an explicit value is held to the same whitespace and unset rule the setting follows when it comes from the environment, rather than to a looser rule of its own. A blank or whitespace-only `--model` is unset, so a missing `GENERATION_MODEL` stays missing and the command is refused before any request is made. A blank or whitespace-only `--prompt-dir` is unset as well, so it falls back to the default `prompts` even where the environment names a different directory.
+`--model`, `--prompt-dir` and `--timeout` each replace the setting they name,
+for one run. An option left out changes nothing. An explicit value is held to
+the same whitespace and unset rule the setting follows when it comes from the
+environment, rather than to a looser rule of its own. A blank or whitespace-only
+`--model` is unset, so a missing `GENERATION_MODEL` stays missing and the
+command is refused before any request is made. A blank or whitespace-only
+`--prompt-dir` is unset as well, so it falls back to the default `prompts` even
+where the environment names a different directory.
 
 | Exit code | Meaning |
 | ---: | --- |
@@ -287,14 +363,17 @@ A message or direction file that is not valid UTF-8 is refused before the genera
 
 ## The writing policy
 
-How a reply reads is decided by the prompts under `prompts/`, not by the code. Adjusting the register, the length, the formulae or the repetition is editing a file there; it never requires a change to Python. `reply_writer/formatter.py` touches whitespace, line endings and a code fence, and nothing else.
+How a reply reads is decided by the prompts under `prompts/`, not by the code.
+Adjusting the register, the length, the formulae or the repetition is editing a
+file there. It never requires a change to Python. `reply_writer/formatter.py`
+touches whitespace, line endings and a code fence, and nothing else.
 
 The received message is untrusted data. For each generation the prompt layer
 wraps the direction and the received message in request-specific boundaries
 whose identifier occurs in neither input nor prompt source. Boundary-looking
 text inside the received message therefore remains part of the message rather
 than becoming prompt structure. The direction is the person's instruction for
-how the reply is written; the received message is never an instruction to the
+how the reply is written. The received message is never an instruction to the
 system.
 
 Pointing `PROMPT_DIR` at a directory of your own still uses the same runtime
@@ -302,19 +381,41 @@ framing and has to satisfy the placeholder contract
 [doc/PROMPTS.md](doc/PROMPTS.md) fixes: `{{direction}}` and `{{message}}`
 remain the only required placeholders, each exactly once.
 
-[doc/PROMPTS.md](doc/PROMPTS.md) states what each file is for, what its output has to satisfy, and how a change to one is made.
+[doc/PROMPTS.md](doc/PROMPTS.md) states what each file is for, what its output
+has to satisfy, and how a change to one is made.
 
 ## When something fails
 
-The screen shows a sentence the person can act on, and on a failure that is not theirs to fix, a request id. It never shows a traceback, the API token, the endpoint, the body of the API response or an internal path.
+The screen shows a sentence the person can act on, and on a failure that is not
+theirs to fix, a request id. It never shows a traceback, the API token, the
+endpoint, the body of the API response or an internal path.
 
-An error never means a reply was sent to the correspondent. It does not prove that the generation API received no data: a generation request may already have reached the configured endpoint. For an oversized Web request rejected before form parsing, the error page cannot restore the original input.
+An error never means a reply was sent to the correspondent. It does not prove
+that the generation API received no data: a generation request may already have
+reached the configured endpoint. For an oversized Web request rejected before
+form parsing, the error page cannot restore the original input.
 
-The log carries the other half: the application's request id, the backend, the endpoint host, the configured model, a validated HTTP status, `stop` or `other` for an accepted finish reason, bounded nonnegative integer token counts, whether an upstream request id was present, the elapsed seconds beside the timeout, and the class of an error. Raw upstream string metadata is never logged. A person reporting a fault quotes the application's request id, and the log is read at that id.
+The log carries the other half: the application's request id, the backend, the
+endpoint host, the configured model, a validated HTTP status, `stop` or `other`
+for an accepted finish reason, bounded nonnegative integer token counts, whether
+an upstream request id was present, the elapsed seconds beside the timeout, and
+the class of an error. Raw upstream string metadata is never logged. A person
+reporting a fault quotes the application's request id, and the log is read at
+that id.
 
-What the log never carries, at any level, is the received message, the direction, the assembled prompts, the generated reply, the body of the API response, the API token or the `Authorization` header. Raising `LOG_LEVEL` reveals none of it, and there is no setting that turns it back on.
+What the log never carries, at any level, is the received message, the
+direction, the assembled prompts, the generated reply, the body of the API
+response, the API token or the `Authorization` header. Raising `LOG_LEVEL`
+reveals none of it, and there is no setting that turns it back on.
 
-Each failure is logged once. The provider, the generation core and the prompt layer raise an error carrying a sanitized internal diagnostic instead of logging it themselves; app.py and cli.py are the only places that write it to the log, so a single failure never produces one log line per layer it passed through. An unexpected exception is logged the same way: the exception's class name and its traceback's stack frames are recorded, and its own message text is not, so that text raised from deep inside a dependency cannot put something private into the log by accident.
+Each failure is logged once. The provider, the generation core and the prompt
+layer raise an error carrying a sanitized internal diagnostic instead of logging
+it themselves. app.py and cli.py are the only places that write it to the log,
+so a single failure never produces one log line per layer it passed through. An
+unexpected exception is logged the same way: the exception's class name and its
+traceback's stack frames are recorded, and its own message text is not, so that
+text raised from deep inside a dependency cannot put something private into the
+log by accident.
 
 ## Tests
 
@@ -322,28 +423,39 @@ Each failure is logged once. The provider, the generation core and the prompt la
 python -m unittest discover -s tests
 ```
 
-No test makes a request, needs a token or reads a `.env`. The provider is replaced by a stub and the `openai` package is stood in for, so the suite runs with neither the dependency nor a network.
+No test makes a request, needs a token or reads a `.env`. The provider is
+replaced by a stub and the `openai` package is stood in for, so the suite runs
+with neither the dependency nor a network.
 
-The suite guards invariants as well as features, including: that the API token appears in no response and no rendered page, and that no text a person entered or the model generated reaches the log. They are not deleted to make a refactor pass.
+The suite guards invariants as well as features, including: that the API token
+appears in no response and no rendered page, and that no text a person entered
+or the model generated reaches the log. They are not deleted to make a refactor
+pass.
 
-All test data is invented. No real mail, message, conversation, personal name, company or matter appears in this repository.
+All test data is invented. No real mail, message, conversation, personal name,
+company or matter appears in this repository.
 
 ## Deployment
 
-gunicorn behind Apache, managed by systemd, published under `/reply/` over HTTPS:
+gunicorn behind Apache, managed by systemd, published under `/reply/` over
+HTTPS:
 
 ```text
 Browser → HTTPS → Apache → 127.0.0.1:8091 → gunicorn → Flask → Generation Core → Provider → the configured API
 ```
 
-`deploy/reply-writer.service` and `deploy/reply-writer.conf` are examples to copy and adjust. Neither carries a hostname, a certificate or a credential.
+`deploy/reply-writer.service` and `deploy/reply-writer.conf` are examples to
+copy and adjust. Neither carries a hostname, a certificate or a credential.
 
 The standard systemd unit and Apache example both name port `8091`
 explicitly. `PORT` in `.env` does not rewrite either deployment file. If the
 production bind port is changed, change the gunicorn bind in the service unit
 and the Apache proxy target to the same value.
 
-Private correspondence passes through this system, so it is not published to anyone who finds the address. Access control belongs to the web server in front of it — Basic authentication, an IP restriction, a VPN — and no account system is introduced into the application to provide it.
+Private correspondence passes through this system, so it is not published to
+anyone who finds the address. Access control belongs to the web server in front
+of it — Basic authentication, an IP restriction, a VPN — and no account system
+is introduced into the application to provide it.
 
 The whole procedure is in [doc/DEPLOYMENT.md](doc/DEPLOYMENT.md).
 
@@ -372,7 +484,11 @@ deploy/                the systemd unit and the Apache virtual host
 doc/                   the requirements, the design, the policy and the rest
 ```
 
-The dependency runs one way. The generation core imports no Flask, reads no request object and builds no HTML, which is what lets the command line and the web application be the same generation. The provider layer keeps the SDK inside it, and the prompt layer decides what the model is told; neither decides the other's business.
+The dependency runs one way. The generation core imports no Flask, reads no
+request object and builds no HTML, which is what lets the command line and the
+web application be the same generation. The provider layer keeps the SDK inside
+it, and the prompt layer decides what the model is told. Neither decides the
+other's business.
 
 ## Documents
 
@@ -383,33 +499,53 @@ The dependency runs one way. The generation core imports no Flask, reads no requ
 - Implementation policy: [doc/POLICY.md](doc/POLICY.md)
 - Release history: [doc/VERSIONS](doc/VERSIONS)
 
-Each of them stands on its own. What this repository needs is written in this repository, and no document here is completed by one kept somewhere else.
+Each of them stands on its own. What this repository needs is written in this
+repository, and no document here is completed by one kept somewhere else.
 
 ## The Japanese that stays
 
-The repository is written in English — the code, the comments, the screens, the documents and the prompts. The generated reply is Japanese, because the correspondence is, and so is the message the person pastes in.
+The repository is written in English — the code, the comments, the screens, the
+documents and the prompts. The generated reply is Japanese, because the
+correspondence is, and so is the message the person pastes in.
 
-Where a document or a prompt has to quote a Japanese string as the specification — a formula the reply must not fall into, a phrase it must not add — the string is quoted literally, because an English translation of it would match nothing.
+Where a document or a prompt has to quote a Japanese string as the specification
+— a formula the reply must not fall into, a phrase it must not add — the string
+is quoted literally, because an English translation of it would match nothing.
 
 ## Not implemented
 
-By design, and not as a gap to be filled later: any connector to Gmail, Outlook, LINE or an SMS service; fetching or sending messages; registering a draft; choosing a recipient; browser automation; a database, a history or a session store; an account system; learning from past replies; RAG; web search; analytics over message content; scheduled or automatic sending.
+By design, and not as a gap to be filled later: any connector to Gmail, Outlook,
+LINE or an SMS service. Fetching or sending messages. Registering a draft.
+Choosing a recipient. Browser automation. A database, a history or a session
+store. An account system. Learning from past replies. RAG. Web search. Analytics
+over message content. Scheduled or automatic sending.
 
-Should one of them become necessary, the requirements change first and the design follows.
+Should one of them become necessary, the requirements change first and the
+design follows.
 
 ## Contribution
 
-Contributions are welcome. The useful ones are the ones that keep the path short: paste, direct where needed, generate, copy.
+Contributions are welcome. The useful ones are the ones that keep the path
+short: paste, direct where needed, generate, copy.
 
-Please follow the style used in this repository: English comments and documents, the module header each file carries, and documentation updated together with the code. [doc/POLICY.md](doc/POLICY.md) states the rules a change is judged by.
+Please follow the style used in this repository: English comments and documents,
+the module header each file carries, and documentation updated together with the
+code. [doc/POLICY.md](doc/POLICY.md) states the rules a change is judged by.
 
 ## Primary Branch
 
 This repository uses `master` as its primary branch name.
 
-The name is used solely as a technical identifier, following the long-standing convention historically used by Git. It does not express or imply any association with racism, slavery, discrimination, or any political or social ideology.
+The name is used solely as a technical identifier, following the long-standing
+convention historically used by Git. It does not express or imply any
+association with racism, slavery, discrimination, or any political or social
+ideology.
 
 ## License
 
-This repository is dual licensed under the [GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the [LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
-For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also [doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the complete license texts.
+This repository is dual licensed under the
+[GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html) or the
+[LGPL version 3](https://www.gnu.org/licenses/lgpl-3.0.html), at your option.
+For full details, please refer to [doc/LICENSE.md](doc/LICENSE.md). See also
+[doc/COPYING](doc/COPYING) and [doc/COPYING.LESSER](doc/COPYING.LESSER) for the
+complete license texts.

@@ -30,7 +30,7 @@
 #  Routes:
 #      /            input screen
 #      /generate    generate a draft reply
-#      /healthz     liveness probe; it calls no API
+#      /healthz     liveness probe. It calls no API
 #
 #  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
@@ -80,7 +80,7 @@ logger = logging.getLogger(__name__)
 
 # Refuse the process rather than the request. A screen offering to
 # generate for someone whose server cannot reach an endpoint wastes the
-# message they pasted; the operator sees the setting named in the
+# message they pasted. The operator sees the setting named in the
 # journal instead.
 validate_generation_config(config)
 
@@ -245,7 +245,7 @@ def _unexpected_diagnostic(error: Exception) -> str:
     Build a sanitized diagnostic for an unexpected exception.
 
     The exception class and the traceback's stack frames are useful for
-    finding a fault; the exception's own message is not carried, since
+    finding a fault. The exception's own message is not carried, since
     it may hold text that must stay out of the log. The frames are
     joined onto one line, so the whole diagnostic reads as a single
     logging call.

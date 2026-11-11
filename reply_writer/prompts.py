@@ -76,7 +76,7 @@ REQUIRED_USER_PLACEHOLDERS = ("{{message}}", "{{direction}}")
 
 # How many locally generated boundary identifiers are tried before a
 # generation is refused. Every attempt is a local comparison with no
-# external side effect; none of them spends a request.
+# external side effect. None of them spends a request.
 BOUNDARY_ATTEMPTS = 32
 
 DIRECTION_LABEL = "DIRECTION FROM THE PERSON WRITING THE REPLY"
@@ -119,7 +119,7 @@ def _new_boundary_id(*texts: str) -> str:
     Return a boundary identifier that occurs in none of the given texts.
 
     Each candidate is generated locally and compared against the
-    prompt source and the input; none of this spends a request. A
+    prompt source and the input. None of this spends a request. A
     candidate that collides with any of the texts is discarded and
     another is drawn, up to BOUNDARY_ATTEMPTS times.
     """
