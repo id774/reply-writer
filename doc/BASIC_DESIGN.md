@@ -157,6 +157,22 @@ gunicorn timeout
 Apache timeout
 ```
 
+These are three different kinds of timeout, and the relation above is one
+between numbers, not a single deadline.
+
+- `GENERATION_TIMEOUT` is the HTTP timeout of the SDK client. It bounds the
+  connect, read, write and pool waits separately. The read wait is the time
+  between chunks of the answer, so a response that keeps arriving can take
+  longer than the value, and the SDK's retries and backoff add to the total.
+  It is not an upper bound on one request or on one generation.
+- gunicorn's `--timeout` is how long a worker may stay silent.
+- Apache's `ProxyTimeout` is a network timeout on the proxy connection.
+
+None of them is a wall-clock deadline, so the application does not promise a
+`504` within the value of `GENERATION_TIMEOUT`, and which layer gives up first
+is not guaranteed. The application adds no deadline, watchdog or cancellation
+of its own. An API timeout reported by the SDK is still mapped onto a `504`.
+
 Changing the timeout of the generation API, or the number of retries, means revisiting the outer timeouts with it.
 
 ---
@@ -399,6 +415,16 @@ The initial version implements a provider for an OpenAI-compatible Chat Completi
 
 Deciding how a reply is written is no business of this layer.
 
+The provider hands the SDK an HTTP client that follows no redirect. A
+`301`, `302`, `303`, `307` or `308` answer, to the same host or to another, is
+therefore an HTTP status error like any other: it is raised as the existing
+upstream error, the web layer shows `502` and the command line exits with `1`,
+no further request is sent to the address the answer names, and neither that
+address nor the body of the answer is recorded. Which address receives the
+input is decided by `GENERATION_BASE_URL` alone. The client's timeout, the
+retries, the request and the acceptance rules for a successful answer are
+unchanged, and the client is released after each call.
+
 The compatibility default is `max_tokens`. Where
 `GENERATION_OUTPUT_TOKEN_PARAMETER=max_completion_tokens`, the provider sends
 that wire field through the SDK's extra request body so the Python dependency
@@ -426,14 +452,18 @@ This layer raises an SDK failure, an unknown output-token parameter, a
 missing `openai` package, or an invalid response, as one of
 `reply_writer.errors`'s classes carrying a sanitized `diagnostic` — the
 backend, the endpoint host, the model, the exception class, the HTTP status,
-whether an upstream request id was present, the elapsed seconds and the configured timeout,
-where they apply — rather than logging the failure itself. The upstream
+whether an upstream request id was present, the elapsed seconds and the
+configured timeout, where they apply — rather than logging the failure itself. The upstream
 exception's own message, which an SDK may build from the response body, is
 never part of that diagnostic or of the mapped exception's chain: the mapped
 error is raised with `from None`. The success path is unaffected:
 `log_response()` still records the shape of an answer once it is accepted.
 
-When a response is received but its choice, finish reason or content is invalid, the provider raises InvalidResponseError with sanitized request metadata and the fixed local validation reason. No response body, prompt, credential or arbitrary upstream exception text is included; the entry point remains the single failure logger.
+When a response is received but its choice, finish reason or content is
+invalid, the provider raises InvalidResponseError with sanitized request
+metadata and the fixed local validation reason. No response body, prompt,
+credential or arbitrary upstream exception text is included; the entry point
+remains the single failure logger.
 
 On success, `log_response()` records the configured model rather than an
 untrusted model name returned by the endpoint. A successful finish reason is
@@ -480,7 +510,7 @@ The settings live in the environment. At a minimum:
 | `GENERATION_BASE_URL` | the API endpoint |
 | `GENERATION_MODEL` | the model used |
 | `GENERATION_RESPONSE_MODE` | how a structured answer is asked for |
-| `GENERATION_TIMEOUT` | the limit on one API call |
+| `GENERATION_TIMEOUT` | the HTTP timeout of the SDK client, applied to each connect, read, write and pool wait; not a limit on the whole call |
 | `GENERATION_MAX_RETRIES` | how many times a call is retried |
 | `GENERATION_TEMPERATURE` | an optional temperature |
 | `GENERATION_OUTPUT_TOKEN_PARAMETER` | which Chat Completions field carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens` |
@@ -543,7 +573,7 @@ GENERATION_MAX_RETRIES=0
 
 One generation by the person is one request to the API, as a rule. The same message is not sent several times where the person cannot see it happening.
 
-Turning retries on is an explicit operational decision.
+Turning retries on is an explicit operational decision. Retries and their backoff add to the time one action takes, and no simple worst case follows from the timeout and the number of retries.
 
 ---
 
@@ -676,6 +706,11 @@ server enforces never disagree.
 
 It calls the generation core and returns the result screen.
 
+The result screen's form that generates again and the failure screen's retry
+form carry the same two fields as the input screen, each with its own live
+character count at the same limit. Where the request was not parsed, as after
+a `413`, the retry form's fields are empty and the count shows zero.
+
 ### `GET /healthz`
 
 Confirms that the process is up and answering as a web application. It performs no traffic to the generation API, and returns no personal data and no internal setting.
@@ -774,7 +809,7 @@ copy
 
 As little as the screens can be built with. Beyond the Clipboard API, for copying, it also:
 
-- shows the message and the direction fields' current length against their configured limit while the person types, and
+- shows the message and the direction fields' current length against their configured limit while the person types, on every form that edits them: the input screen, the form that generates again on the result screen, and the retry form on a failure screen, using one shared routine that reads the field's `value.length` once on load and again on each input, and
 - gives a generation submit immediate feedback — a "Generating..." notice, the submit control disabled, and the same in-flight submission held to one — before the browser's ordinary POST leaves for the server.
 
 Generation is never sent to the API from JavaScript. The token and the endpoint of the generation API never reach the browser. The generation traffic always leaves from the server, as the native form submission that `POST /generate` already accepts. Where a browser runs no script, the character count and the submit feedback are absent, and generation still succeeds through that same native form submission.

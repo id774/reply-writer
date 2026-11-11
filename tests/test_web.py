@@ -74,6 +74,10 @@
 #      at their own configured limit.
 #    - Serve a script that carries the character-count and the generation
 #      submit-feedback helpers.
+#    - Give the regeneration form on the result screen, and the retry form
+#      on the failure screens, the same counters at the same limits.
+#    - Leave the retry form empty, with its counters, where the input was
+#      not parsed: after a 413 and on a routing error.
 #
 #  Requirements:
 #  - Python Version: 3.9 or later
@@ -137,6 +141,32 @@ def draft(body=REPLY, subject=None, notices=None):
                       notices=notices or [])
 
 
+def assert_count_contract(test, page, message=None, direction=None):
+    """
+    Assert that both editable fields of a page carry a counter.
+
+    Each field names its own display target, is described by it, keeps
+    its configured limit, and the ids are used once, so the script finds
+    exactly one target for each.
+    """
+    for name, limit, value in (
+            ("message", web.config.max_input_chars, message),
+            ("direction", web.config.max_policy_chars, direction)):
+        field = re.search(
+            r'<textarea id="{0}"[^>]*>(.*?)</textarea>'.format(name),
+            page, re.S)
+        test.assertIsNotNone(field, name)
+        test.assertIn('maxlength="{0}"'.format(limit), field.group(0))
+        test.assertIn('aria-describedby="{0}-count"'.format(name),
+                      field.group(0))
+        test.assertIn('data-character-count-target="{0}-count"'.format(name),
+                      field.group(0))
+        test.assertEqual(page.count('id="{0}"'.format(name)), 1)
+        test.assertEqual(page.count('id="{0}-count"'.format(name)), 1)
+        if value is not None:
+            test.assertEqual(field.group(1), value)
+
+
 class WebTestCase(unittest.TestCase):
     """ Shared test client and stubbing of the generation core. """
 
@@ -183,6 +213,20 @@ class RouteTest(WebTestCase):
         self.assertIn('id="message-count"', page)
         self.assertIn('data-character-count-target="direction-count"', page)
         self.assertIn('id="direction-count"', page)
+
+    def test_script_counts_the_value_length_on_load_and_on_input(self):
+        """ Update every counted field from its value, once and per input. """
+        script = self.client.get("/static/copy.js").get_data(as_text=True)
+        self.assertIn("field.value.length", script)
+        self.assertIn("field.maxLength", script)
+        self.assertIn('field.addEventListener("input"', script)
+        self.assertIn("querySelectorAll(\"[data-character-count-target]\")",
+                      script)
+
+    def test_input_screen_counters_are_unique_and_described(self):
+        """ Keep the first form on the same contract as the others. """
+        page = self.client.get("/").get_data(as_text=True)
+        assert_count_contract(self, page, message="", direction="")
 
     def test_web_script_contains_progressive_generation_helpers(self):
         """ Serve the character-count and submit-feedback helpers. """
@@ -288,6 +332,56 @@ class ResultScreenTest(WebTestCase):
         for setting in (web.config.generation_base_url,
                         web.config.generation_backend, TOKEN):
             self.assertNotIn(setting, page)
+
+
+class RegenerationFormTest(WebTestCase):
+    """ Cover the counters of the forms that edit what was entered. """
+
+    def test_result_screen_regeneration_form_has_the_counters(self):
+        """ Count both fields of the form that generates again. """
+        response = self.post(direction=DIRECTION)
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        assert_count_contract(self, page, message=MESSAGE,
+                              direction=DIRECTION)
+        self.assertIn('<form method="post" action="/generate">', page)
+
+    def test_retry_form_after_a_failure_has_the_counters(self):
+        """ Count both fields of the retry form, restored as typed. """
+        for error, status in ((UpstreamConnectionError(), 502),
+                              (UpstreamTimeoutError(), 504)):
+            with self.subTest(status=status):
+                response = self.post(direction=DIRECTION, result=error)
+                page = response.get_data(as_text=True)
+                self.assertEqual(response.status_code, status)
+                assert_count_contract(self, page, message=MESSAGE,
+                                      direction=DIRECTION)
+
+    def test_retry_form_is_empty_where_the_input_was_not_parsed(self):
+        """ Restore nothing after a 413 or a routing error, yet count. """
+        oversized = "あ" * (web.app.config["MAX_CONTENT_LENGTH"] + 1)
+        too_large = self.client.post("/generate", data={"message": oversized})
+        pages = ((too_large, 413),
+                 (self.client.get("/no-such-page"), 404),
+                 (self.client.get("/generate"), 405))
+        for response, status in pages:
+            with self.subTest(status=status):
+                page = response.get_data(as_text=True)
+                self.assertEqual(response.status_code, status)
+                assert_count_contract(self, page, message="", direction="")
+                self.assertNotIn(oversized[:100], page)
+
+    def test_forms_still_post_without_the_script(self):
+        """ Keep the plain form post that works without JavaScript. """
+        for response in (self.post(),
+                         self.post(result=UpstreamTimeoutError())):
+            page = response.get_data(as_text=True)
+            self.assertIn('method="post" action="/generate"', page)
+            self.assertIn('name="message"', page)
+            self.assertIn('name="direction"', page)
+            self.assertIn('type="submit"', page)
+            self.assertNotIn("onsubmit", page)
+            self.assertNotIn("fetch(", page)
 
 
 class RefusalTest(WebTestCase):

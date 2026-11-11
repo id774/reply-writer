@@ -139,6 +139,9 @@ The settings decide where a private message is sent, so they are read strictly.
   uses one route, whatever went wrong on it: an unreachable host, a timeout, a
   rejected credential, a rate limit, a failure of the API itself and an invalid
   answer are all reported, and none of them is a reason to try somewhere else.
+- Do not follow an HTTP redirect from the endpoint, to the same host or to
+  another. A redirect is not an additional endpoint: it is reported as a
+  failure of the API, and nothing entered is sent to the address it names.
 - Do not rewrite the base URL the operator named. The code does not change its
   scheme or host and does not substitute a different base URL. The configured
   provider may use the resource path defined by its wire protocol; for the
@@ -846,11 +849,14 @@ that the requirements are incomplete, and that is where it is taken.
   silently decoded with replacement characters, and the raw
   `UnicodeDecodeError`, the invalid byte, and the file's contents stay out of
   what is shown or logged.
-- Every outbound request carries an explicit timeout, which `GENERATION_TIMEOUT`
-  supplies. There is no request without one: a request that hangs holds a web
-  worker until the client gives up. The timeouts of the application server and
-  of the web server sit outside it, in the order the basic design fixes, and
-  changing one means revisiting the others.
+- Every outbound request carries an explicit SDK HTTP timeout, which
+  `GENERATION_TIMEOUT` supplies. There is no request without one. It bounds
+  each connect, read, write and pool wait separately; it is not a limit on the
+  total elapsed time of a request or a generation, which retries and a
+  response that keeps arriving can exceed. The timeouts of the application
+  server and of the web server are different kinds of timeout and sit outside
+  it, in the order the basic design fixes; none of the three is a wall-clock
+  deadline, and changing one means revisiting the others.
 - Treat the answer as untrusted input. It is validated before it reaches a
   template, and one that does not validate is refused rather than repaired into
   something that passes.

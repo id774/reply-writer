@@ -22,9 +22,9 @@
 #
 #  The log cases are part of the contract rather than an extra: a line
 #  records the shape of an exchange and never its content, and the
-#  elapsed seconds appear next to the limit on a success and on a
-#  timeout alike, because only that pair says whether the limit was
-#  reached or the connection died well short of it.
+#  elapsed seconds appear next to the timeout on a success and on a
+#  timeout alike, as context only: the timeout is the SDK's HTTP timeout
+#  for each wait, so the total says nothing certain about the cause.
 #
 #  Author: id774 (More info: https://id774.net)
 #  Source Code: https://github.com/id774/reply-writer
@@ -49,6 +49,13 @@
 #      a request is spent.
 #    - Send no temperature unless it is set, and send it when it is.
 #    - Never stream.
+#    - Hand the SDK an HTTP client that follows no redirect, and keep the
+#      token, the base URL, the timeout and the retries as configured.
+#    - Release the client after a call, whether it succeeded or failed.
+#    - Refuse 301, 302, 303, 307 and 308 as an upstream error, to the same
+#      host or another, without a second request and without the Location.
+#    - Keep a 3xx from being retried into a success, even when it carries
+#      an x-should-retry header and retries are enabled.
 #    - Normalize a well formed answer, including the usage counters.
 #    - Measure how long the one request took.
 #    - Accept an answer that carries no usage.
@@ -164,13 +171,30 @@ def config(**overrides) -> Config:
     return Config(**values)
 
 
+class FakeHttpClient:
+    """ Stands in for the SDK's default HTTP client and its redirect rule. """
+
+    def __init__(self, **arguments):
+        self.arguments = arguments
+        # The SDK's own default follows redirects; only an explicit
+        # argument turns that off.
+        self.follow_redirects = arguments.get("follow_redirects", True)
+
+
 class FakeSDK:
     """ A stand-in openai module recording what the provider does. """
 
-    def __init__(self, result=None, error=None):
+    def __init__(self, result=None, error=None, redirect=None):
         self.result = result if result is not None else answer()
         self.error = error
+        # A (status, location) pair: the endpoint answers with that
+        # redirect, and the stand-in client follows it, as the real one
+        # would, unless it was built not to.
+        self.redirect = redirect
         self.client_arguments = None
+        self.http_client = None
+        self.closed = 0
+        self.followed = []
         self.request = None
 
     def install(self, test):
@@ -181,21 +205,38 @@ class FakeSDK:
         module.APIStatusError = FakeStatusError
         module.APIError = FakeError
         module.OpenAI = self._client
+        module.DefaultHttpxClient = self._http_client
         test.addCleanup(sys.modules.pop, "openai", None)
         sys.modules["openai"] = module
+
+    def _http_client(self, **arguments):
+        """ Record how the HTTP client was built and return a stand-in. """
+        self.http_client = FakeHttpClient(**arguments)
+        return self.http_client
 
     def _client(self, **arguments):
         """ Record how the client was built and return a stand-in. """
         self.client_arguments = arguments
         completions = SimpleNamespace(create=self._create)
         return SimpleNamespace(
-            chat=SimpleNamespace(completions=completions))
+            chat=SimpleNamespace(completions=completions),
+            close=self._close)
+
+    def _close(self):
+        """ Count the releases of the client. """
+        self.closed += 1
 
     def _create(self, **request):
         """ Record the one request and answer it. """
         if self.request is not None:
             raise AssertionError("more than one request was spent")
         self.request = request
+        if self.redirect is not None:
+            status, location = self.redirect
+            if self.client_arguments["http_client"].follow_redirects:
+                self.followed.append(location)
+                return self.result
+            raise FakeStatusError("redirect", status_code=status)
         if self.error is not None:
             raise self.error
         return self.result
@@ -257,6 +298,31 @@ class ClientTest(ProviderTestCase):
         """ Leave the count where an operator can see it. """
         self.complete(settings=config(generation_max_retries=2))
         self.assertEqual(self.sdk.client_arguments["max_retries"], 2)
+
+
+    def test_hands_the_sdk_a_client_that_follows_no_redirect(self):
+        """ Never let the endpoint name another address for the input. """
+        self.complete(settings=config(generation_timeout=45.0,
+                                      generation_max_retries=1))
+        arguments = dict(self.sdk.http_client.arguments)
+        hooks = arguments.pop("event_hooks")
+        self.assertEqual(arguments, {"follow_redirects": False})
+        self.assertEqual(list(hooks), ["response"])
+        self.assertEqual(len(hooks["response"]), 1)
+        self.assertIs(self.sdk.client_arguments["http_client"],
+                      self.sdk.http_client)
+        self.assertEqual(self.sdk.client_arguments["api_key"], TOKEN)
+        self.assertEqual(self.sdk.client_arguments["base_url"],
+                         "https://api.example.test/v1")
+        self.assertEqual(self.sdk.client_arguments["timeout"], 45.0)
+        self.assertEqual(self.sdk.client_arguments["max_retries"], 1)
+
+    def test_releases_the_client_after_a_call(self):
+        """ Close the client whether the call succeeded or failed. """
+        self.complete()
+        self.assertEqual(self.sdk.closed, 1)
+        self.fail_with(FakeTimeoutError("timed out"))
+        self.assertEqual(self.sdk.closed, 1)
 
 
 class RequestTest(ProviderTestCase):
@@ -486,6 +552,55 @@ class FailureTest(ProviderTestCase):
         error = self.fail_with(FakeTimeoutError("timed out"))
         self.assertIsInstance(error, UpstreamTimeoutError)
 
+    def test_refuses_every_redirect_without_a_second_request(self):
+        """ Treat a 3xx as an upstream error and follow it nowhere. """
+        locations = ("https://other.example.test/v1/chat/completions",
+                     "https://api.example.test/v1/elsewhere")
+        for status in (301, 302, 303, 307, 308):
+            for location in locations:
+                with self.subTest(status=status, location=location):
+                    sdk = FakeSDK(redirect=(status, location))
+                    with self.assertRaises(UpstreamStatusError) as raised:
+                        self.complete(sdk)
+                    diagnostic = raised.exception.diagnostic
+                    self.assertEqual(sdk.followed, [])
+                    self.assertIsNotNone(sdk.request)
+                    self.assertEqual(sdk.closed, 1)
+                    self.assertIn("status={0}".format(status), diagnostic)
+                    self.assertNotIn("example.test/v1/elsewhere", diagnostic)
+                    self.assertNotIn("other.example.test", diagnostic)
+                    self.assertNotIn(location, diagnostic)
+                    self.assertNotIn(TOKEN, diagnostic)
+                    self.assertNotIn(MESSAGES[1]["content"], diagnostic)
+                    self.assertEqual(raised.exception.status_code, 502)
+
+    def test_redirect_hook_removes_the_retry_override_only_from_a_3xx(self):
+        """ Never let x-should-retry turn a redirect into a retried call. """
+        self.complete()
+        hook = self.sdk.http_client.arguments["event_hooks"]["response"][0]
+        for status in (301, 302, 303, 307, 308):
+            with self.subTest(status=status):
+                response = SimpleNamespace(
+                    status_code=status,
+                    headers={"x-should-retry": "true", "location": "x"})
+                hook(response)
+                self.assertNotIn("x-should-retry", response.headers)
+                self.assertIn("location", response.headers)
+        for status in (200, 429, 500, 503):
+            with self.subTest(status=status):
+                response = SimpleNamespace(
+                    status_code=status, headers={"x-should-retry": "true"})
+                hook(response)
+                self.assertEqual(response.headers["x-should-retry"], "true")
+
+    def test_a_followed_redirect_would_have_gone_elsewhere(self):
+        """ Show that the stand-in does follow when not told otherwise. """
+        sdk = FakeSDK(redirect=(307, "https://other.example.test/v1"))
+        sdk.install(self)
+        client = sdk._client(http_client=FakeHttpClient())
+        client.chat.completions.create(model="m", messages=[])
+        self.assertEqual(sdk.followed, ["https://other.example.test/v1"])
+
     def test_maps_a_connection_failure(self):
         """ Report an unreachable endpoint as one. """
         error = self.fail_with(FakeConnectionError("unreachable"))
@@ -580,7 +695,8 @@ class LogTest(ProviderTestCase):
         line = "\n".join(recorded.output)
         self.assertEqual(result.model, "PRIVATE_MODEL_TEXT")
         self.assertEqual(result.finish_reason, "PRIVATE_FINISH_TEXT")
-        self.assertEqual(result.upstream_request_id, "PRIVATE_UPSTREAM_ID_TEXT")
+        self.assertEqual(result.upstream_request_id,
+                         "PRIVATE_UPSTREAM_ID_TEXT")
         self.assertEqual(result.prompt_tokens, "PRIVATE_PROMPT_COUNT")
         self.assertIs(result.completion_tokens, True)
         self.assertEqual(result.total_tokens, -1)

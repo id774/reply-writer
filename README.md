@@ -118,7 +118,7 @@ Every setting is read from the environment, or from a `.env` file beside the app
 | `GENERATION_BASE_URL` | yes | — | The endpoint, https only, with the version path and without the resource name. |
 | `GENERATION_MODEL` | yes | — | The model used for generation. |
 | `GENERATION_RESPONSE_MODE` | no | `prompt-json` | How a structured answer is asked for: `prompt-json` or `json-object`. |
-| `GENERATION_TIMEOUT` | no | `120` | Seconds allowed for one request. |
+| `GENERATION_TIMEOUT` | no | `120` | The SDK's HTTP timeout in seconds, applied to each connect, write, read and pool wait. It is not a limit on the whole request. |
 | `GENERATION_MAX_RETRIES` | no | `0` | Retries left to the SDK. |
 | `GENERATION_TEMPERATURE` | no | unset | Sent only when set. |
 | `GENERATION_OUTPUT_TOKEN_PARAMETER` | no | `max_tokens` | Request field that carries `MAX_OUTPUT_TOKENS`: `max_tokens` or `max_completion_tokens`. |
@@ -196,9 +196,9 @@ the API token as a command-line option is unchanged as well.
 
 ### One action, one request
 
-`GENERATION_MAX_RETRIES` defaults to `0`, so one press of the generate button is one request to the endpoint. Raising it is an explicit operational decision, and it multiplies the worst case wait by the same factor.
+`GENERATION_MAX_RETRIES` defaults to `0`, so one press of the generate button is one request to the endpoint. Raising it is an explicit operational decision; retries and their backoff add to how long one action can take, and no simple worst case can be computed from the timeout.
 
-A failure is never a reason to try somewhere else. An unreachable host, a timeout, a rejected credential, a rate limit, a failure of the API itself and an unreadable answer are all reported on the route that was configured. For one generation, exactly one API receives what was entered.
+A failure is never a reason to try somewhere else. An unreachable host, a timeout, a rejected credential, a rate limit, a failure of the API itself and an unreadable answer are all reported on the route that was configured. For one generation, exactly one API receives what was entered. A redirect from the endpoint is not followed either, to the same host or to another: a 301, 302, 303, 307 or 308 answer is reported as an error from the API, and nothing entered is sent on to the address it names. An endpoint that only works through a redirect has to be configured at its final address.
 
 ### Asking for JSON
 
@@ -219,6 +219,16 @@ A response is accepted only where the endpoint reports a usable, non-empty `fini
 ```text
 GENERATION_TIMEOUT (120)  <  gunicorn --timeout (240)  <  Apache ProxyTimeout (300)
 ```
+
+These are three different kinds of timeout, and the order is a relation between
+numbers, not a guarantee about time. `GENERATION_TIMEOUT` is the SDK's HTTP
+timeout: it bounds each connect, write, read and pool wait separately, and the
+read wait is the time between chunks of the answer, so a response that keeps
+arriving can take longer than 120 seconds, and retries and their backoff add to
+that. gunicorn's `--timeout` is how long a worker may stay silent, and Apache's
+`ProxyTimeout` is a network timeout on the proxy connection. None of them is a
+wall-clock deadline, so the application is not guaranteed to answer with a 504
+within 120 seconds, and which layer gives up first is not guaranteed either.
 
 Changing `GENERATION_TIMEOUT` means revisiting the gunicorn and Apache
 timeouts.
@@ -247,7 +257,7 @@ message after parsing, and it applies to both the Web UI and the CLI. The CLI
 has no HTTP request-body limit.
 
 The input screen carries the message field, the optional direction field, and
-the generate button. The direction is marked optional and may be left empty, which is the ordinary case. Where the browser runs the page's script, the message and direction fields show a running character count, and submitting shows an immediate "Generating..." notice with the button disabled while the request is in flight; with script unavailable, the same POST to `/generate` still generates a draft. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
+the generate button. The direction is marked optional and may be left empty, which is the ordinary case. Where the browser runs the page's script, the message and direction fields show a running character count, and so do the same two fields of the form that generates again on the result screen and of the retry form on a failure screen; submitting shows an immediate "Generating..." notice with the button disabled while the request is in flight; with script unavailable, the same POST to `/generate` still generates a draft. The result screen shows the reply with a copy control beside it, and the subject with a copy control of its own where the reply carries one. Where it carries none, the subject field is not on the page at all.
 
 ### From the command line
 
