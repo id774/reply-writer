@@ -33,6 +33,8 @@
 #  - openai
 #
 #  Version History:
+#  v1.4 2026-11-11
+#       Refused to follow generation API redirects.
 #  v1.3 2026-11-09
 #       Sanitized invalid-response diagnostics and SDK error metadata.
 #  v1.2 2026-09-21
@@ -62,6 +64,19 @@ from reply_writer.providers import CompletionResult, log_response
 TRUNCATED_REASONS = ("length", "max_tokens")
 
 
+def _without_retry_override(response: Any) -> None:
+    """
+    Keep the SDK from retrying a redirect answer.
+
+    The SDK retries any answer carrying 'x-should-retry: true', whatever
+    its status. A 3xx must stay a refusal, so the header is dropped from
+    it before the SDK reads it; every other status is left alone, and
+    the retries the operator configured apply to them as before.
+    """
+    if 300 <= response.status_code < 400:
+        response.headers.pop("x-should-retry", None)
+
+
 class OpenAICompatibleProvider:
     """ Provider for an OpenAI compatible Chat Completions endpoint. """
 
@@ -69,13 +84,24 @@ class OpenAICompatibleProvider:
                  request_id: str = "") -> CompletionResult:
         """ Send one chat completion request and normalize its answer. """
         client = self._client(config)
+        try:
+            return self._complete(client, messages, config, request_id)
+        finally:
+            # The client owns the connection pool built for this one
+            # call; it is released whether the call succeeded or not.
+            client.close()
+
+    def _complete(self, client: Any, messages: List[Dict[str, str]],
+                  config: Config, request_id: str) -> CompletionResult:
+        """ Run the one request against the given client. """
         request = self._request(messages, config)
 
         # The clock starts at the call and not at the top of the
         # method, so that what is reported is the wait on the endpoint
         # alone. Nothing here is streamed: the whole answer arrives at
         # the end, which makes this figure the wait the person actually
-        # had, and the one to compare against GENERATION_TIMEOUT.
+        # had. GENERATION_TIMEOUT is the SDK's HTTP timeout and not a
+        # limit on this figure, which can exceed it.
         started = time.monotonic()
         response = self._create(client, request, config, started, request_id)
         try:
@@ -90,7 +116,7 @@ class OpenAICompatibleProvider:
     def _client(self, config: Config) -> Any:
         """ Build the client described by the configuration. """
         try:
-            from openai import OpenAI
+            from openai import DefaultHttpxClient, OpenAI
         except ImportError:
             raise InternalError("openai package missing") from None
 
@@ -98,11 +124,24 @@ class OpenAICompatibleProvider:
         # the SDK fall back to its own endpoint, which is the one thing
         # this design refuses to allow; config.py has already rejected
         # that case, and this keeps the guarantee local as well.
+        #
+        # The SDK's own HTTP client follows redirects, and a 307 or a
+        # 308 would send the received message and the direction on to
+        # whatever address the endpoint names. The client handed over
+        # here follows none, to the same host or to another, so a 3xx
+        # answer is an error status like any other and no request is
+        # made to an address the operator did not configure. The SDK's
+        # retry rule would honour an x-should-retry header even on a
+        # 3xx and could turn a later 200 into a success, so the hook
+        # removes that header from a redirect: it is never retried.
         return OpenAI(
             api_key=config.generation_api_token,
             base_url=config.generation_base_url,
             timeout=config.generation_timeout,
             max_retries=config.generation_max_retries,
+            http_client=DefaultHttpxClient(
+                follow_redirects=False,
+                event_hooks={"response": [_without_retry_override]}),
         )
 
     def _request(self, messages: List[Dict[str, str]],
@@ -196,11 +235,11 @@ class OpenAICompatibleProvider:
         cover the model, 429 a rate limit or an exhausted allowance, and
         only the diagnostic can say which happened.
 
-        The elapsed seconds sit next to the limit for the same reason.
-        A timeout that fired at the limit is an endpoint slower than
-        the time allowed, which raising GENERATION_TIMEOUT addresses;
-        one that fired well short of it is a connection lost on the
-        way, and raising the limit would change nothing.
+        The elapsed seconds sit next to the timeout as context. They
+        are not a diagnosis by themselves: GENERATION_TIMEOUT is the
+        SDK's HTTP timeout for each wait, not a limit on the whole
+        request, so comparing the total with it cannot tell a slow
+        endpoint from a lost connection, and retries add to the total.
 
         Carry the exception class but not its message. An SDK may put
         the upstream response body into an exception message, and that

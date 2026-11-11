@@ -35,10 +35,16 @@
   <summary>Change the direction and generate again</summary>
   <form method="post" action="{{ url_for('generate') }}">
     <label for="message">Message you are replying to</label>
-    <textarea id="message" name="message" lang="ja" rows="8" maxlength="{{ max_input_chars }}">{{ message }}</textarea>
+    <textarea id="message" name="message" lang="ja" rows="8" maxlength="{{ max_input_chars }}"
+              aria-describedby="message-count"
+              data-character-count-target="message-count">{{ message }}</textarea>
+    <p id="message-count" class="count"></p>
 
     <label for="direction">Direction <span class="optional">(optional)</span></label>
-    <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}">{{ direction }}</textarea>
+    <textarea id="direction" name="direction" lang="ja" rows="4" maxlength="{{ max_policy_chars }}"
+              aria-describedby="direction-count"
+              data-character-count-target="direction-count">{{ direction }}</textarea>
+    <p id="direction-count" class="count"></p>
 
     <div class="buttons">
       <button type="submit">Generate again</button>

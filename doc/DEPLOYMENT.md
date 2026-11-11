@@ -144,9 +144,15 @@ A generation API answers more slowly than ordinary web traffic, so the limits wi
 GENERATION_TIMEOUT  <  gunicorn --timeout  <  Apache ProxyTimeout
 ```
 
-Raising one means revisiting the other two. An inner limit above an outer one means the person is shown a proxy error while the application is still waiting, and the log then shows a generation that succeeded into a connection nobody was left holding.
+The three are different kinds of timeout, and the order is a relation between numbers, not one deadline:
 
-`GENERATION_MAX_RETRIES` multiplies the worst case wait by the same factor, so raising it means revisiting the outer limits as well. It is 0 by default: one action by the person is one request.
+- `GENERATION_TIMEOUT` is the SDK's HTTP timeout. It bounds each connect, write, read and pool wait separately, and the read wait is the time between chunks of the answer, so a response that keeps arriving can take longer than 120 seconds.
+- gunicorn's `--timeout` is how long a worker may stay silent.
+- Apache's `ProxyTimeout` is a network timeout on the proxy connection.
+
+None of them is a limit on the whole request. The application is therefore not guaranteed to answer with a 504 within 120 seconds, and which layer gives up first is not guaranteed. If gunicorn or Apache ends the exchange first, the person is shown the proxy's or the server's error instead of the application's 504, and the log may show a generation that succeeded into a connection nobody was left holding.
+
+Retries and their backoff add to the total time, and no simple worst case can be computed from `GENERATION_TIMEOUT` and the number of retries. `GENERATION_MAX_RETRIES` is 0 by default: one action by the person is one request. Raising it means revisiting the outer limits as well.
 
 ## Verify the complete path
 
@@ -193,9 +199,10 @@ That is why a person reporting a fault is asked for the request id shown on the 
 | The service will not start | The journal names the setting at fault. All four required settings must be in `.env`. |
 | The screen reports an unreachable service | The endpoint host, the network, and whether the base URL is the one intended. |
 | The screen reports an error from the service | The journal line carries the HTTP status: 401 a token to replace, 403 a plan that does not cover the model, 429 a rate limit. |
-| Generation is stopped as too long | `GENERATION_TIMEOUT`, and the elapsed seconds in the journal beside it. A wait that ended well short of the limit is a connection lost, not a limit too low. |
+| Generation is stopped as too long | `GENERATION_TIMEOUT`, the SDK's HTTP timeout, and the elapsed seconds in the journal beside it as context only: it is not a limit on the whole request, so the total elapsed time alone does not tell a slow endpoint from a lost connection. If gunicorn or Apache ended the exchange first, the application's 504 is not guaranteed and the proxy's or the server's own error may be shown. |
 | The result cannot be read | `GENERATION_RESPONSE_MODE`, and whether the model keeps the JSON contract. Nothing is cut out of an answer that arrived wrapped in prose. |
 | An unexpected failure with a request id | The journal, at that id. |
+| The service reports an error although the endpoint is reachable by browser | The configured base URL may answer with a redirect. Redirects are never followed; the journal line carries the 3xx status. Configure the final address of the endpoint. |
 | An HTTP request is rejected as too large (413) | Reduce the submitted input and try again. The rejected form cannot be restored from the error page. |
 
 The application falls back to no second endpoint for any of these. One generation uses the one route the configuration names, which is what keeps it possible to say afterwards where a message went.

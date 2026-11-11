@@ -17,8 +17,10 @@ Group=reply
 WorkingDirectory=/opt/reply-writer
 EnvironmentFile=/opt/reply-writer/.env
 # 127.0.0.1 only. Apache is the entrance from outside, and gunicorn is
-# never exposed to the internet directly. The timeout sits above
-# GENERATION_TIMEOUT (120) and below the Apache ProxyTimeout (300).
+# never exposed to the internet directly. The --timeout is how long a
+# worker may stay silent; it is set above GENERATION_TIMEOUT (120), the
+# SDK's HTTP timeout, and below the Apache ProxyTimeout (300). The
+# three are different kinds of timeout, not one deadline.
 ExecStart=/opt/reply-writer/.venv/bin/gunicorn app:app \
           --bind 127.0.0.1:8091 --workers 2 --timeout 240
 Restart=always

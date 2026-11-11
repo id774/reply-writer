@@ -7,9 +7,12 @@ v1.0.3 (Release Date: TBD)
 - Reject surrounding whitespace in generation base URLs before API requests.
 - Report reply delivery and input restoration accurately on error pages.
 - Handle CLI draft output failures without exposing exception details.
-- Preserve safe request diagnostics and exclude untrusted API metadata from logs.
+- Preserve safe request diagnostics and exclude untrusted API metadata from
+  logs.
 - Parse integer settings exactly without floating-point rounding.
 - Classify excessively nested generated JSON as an invalid response.
+- Refuse generation API redirects to keep input on the configured endpoint.
+- Show live character counts in retry and regeneration forms.
 
 v1.0.2 (2026-09-21)
 -------------------

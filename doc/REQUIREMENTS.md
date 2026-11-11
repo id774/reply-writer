@@ -225,6 +225,8 @@ The generation endpoint is named by the configuration.
 
 With no endpoint configured, the system connects to no particular external service by default. On a failure it falls back to no other generation service. One generation uses exactly one explicitly configured path.
 
+A response from the configured generation API grants no authority over where the input goes next. An HTTP redirect is not followed, whether it points to another host or to the same one: a 301, 302, 303, 307 or 308 answer is a failure of the API and is reported as one, and nothing entered is sent to the address it names. A redirect from the endpoint is therefore never a path the system takes.
+
 ### 15.4 What it talks to
 
 In ordinary generation, the only outbound traffic is to the configured generation API.
@@ -333,6 +335,12 @@ counted the same way the browser counts it while the person types, so that a
 message the on-screen counter accepted is never refused once it reaches the
 server; the command line, which has no counter of its own, applies the same
 count as the Web UI.
+
+The same live count applies to the same two fields wherever they can be
+edited again: the form that generates again on the result screen and the retry
+form on a failure screen carry it as the input screen does, at the same
+limits. Where a failure screen cannot restore what was entered, the fields are
+empty and the count shows zero.
 
 ### 18.2 Result
 

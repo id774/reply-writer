@@ -46,7 +46,8 @@
 #      Base URL of the endpoint, including the version path and without
 #      the resource name. Required, and https only, so that no message
 #      ever leaves for an endpoint nobody named.
-#      Any whitespace in the original value, including at either end, is rejected.
+#      Any whitespace in the original value, including at either end, is
+#      rejected.
 #  - GENERATION_MODEL
 #      Model used for generation. Required; no default is shipped,
 #      because the available models differ per endpoint.
@@ -55,9 +56,13 @@
 #      response_format, 'prompt-json' asks in the prompt alone.
 #      Defaults to prompt-json.
 #  - GENERATION_TIMEOUT
-#      Seconds allowed for one request. Defaults to 120. The answer is
-#      not streamed, so the wait is the whole generation. Raising it
-#      means raising the gunicorn and Apache timeouts with it.
+#      HTTP timeout, in seconds, handed to the SDK client. Defaults to
+#      120. It bounds each connect, write, read and pool wait separately;
+#      the read wait is the time between chunks of the answer, so it is
+#      not a limit on the whole request or on the whole generation, and
+#      SDK retries and backoff add to the total. Raising it means
+#      revisiting the gunicorn and Apache timeouts, which are different
+#      kinds of timeout and do not make one exact deadline.
 #  - GENERATION_MAX_RETRIES
 #      Retries left to the SDK. Defaults to 0, so that one action by
 #      the person costs one request.

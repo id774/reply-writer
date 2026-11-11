@@ -97,7 +97,11 @@ class UpstreamConnectionError(ReplyWriterError):
 
 class UpstreamTimeoutError(ReplyWriterError):
     """
-    Raised when one request exceeds GENERATION_TIMEOUT.
+    Raised when the SDK reports that an HTTP timeout was exceeded.
+
+    GENERATION_TIMEOUT is the SDK's HTTP timeout, not a limit on the
+    whole request: a transfer that keeps making progress can take
+    longer than it, so this error is not raised at a fixed elapsed time.
 
     The message asks for another attempt and nothing else. Shortening
     the message is not advised, because the wait is the time the
