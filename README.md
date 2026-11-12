@@ -17,9 +17,8 @@
 13. [Documents](#documents)
 14. [The Japanese that stays](#the-japanese-that-stays)
 15. [Not implemented](#not-implemented)
-16. [Contribution](#contribution)
-17. [Primary Branch](#primary-branch)
-18. [License](#license)
+16. [Primary Branch](#primary-branch)
+17. [License](#license)
 
 ## Overview
 
@@ -531,15 +530,6 @@ The following capabilities are excluded by design, not deferred for later:
 
 Should one of them become necessary, the requirements change first and the
 design follows.
-
-## Contribution
-
-Contributions are welcome. The useful ones are the ones that keep the path
-short: paste, direct where needed, generate, copy.
-
-Please follow the style used in this repository: English comments and documents,
-the module header each file carries, and documentation updated together with the
-code. [doc/POLICY.md](doc/POLICY.md) states the rules a change is judged by.
 
 ## Primary Branch
 
