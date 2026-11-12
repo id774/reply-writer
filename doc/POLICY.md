@@ -22,9 +22,25 @@ to match a more general rule.
 
 **Simplicity is robustness.**
 
-This principle governs the following implementation and maintenance rules. It
-does not permit dropping required behavior, security, compatibility, or
-validation. Satisfy those obligations without unnecessary complexity.
+This is the governing principle for every rule below. It does not authorize
+dropping required behavior, compatibility, security, safety, documentation, or
+validation. It requires satisfying those requirements with no more complexity
+than the actual problem justifies.
+
+Complexity is itself a source of failure, compatibility risk, operational risk,
+security risk, and maintenance cost. Do not add a branch, state variable,
+helper, abstraction, dependency, network boundary, retry, fallback, validation,
+configuration state, or framework unless the specification requires it or it
+addresses a realistic failure mode with meaningful consequence.
+
+Do not re-check a condition already guaranteed by a preceding successful
+operation or an established invariant. Do not create a layer merely to resemble
+a possible future architecture.
+
+When two designs satisfy the same requirements, choose the one with less
+control flow, less state, fewer dependencies, fewer side effects, fewer moving
+parts, and fewer operational assumptions. Simplicity is judged by the number of
+necessary concepts and behaviors, not by line count alone.
 
 ## 1. General Policy
 
@@ -72,14 +88,41 @@ validation. Satisfy those obligations without unnecessary complexity.
   write a direction where one is needed, generate, copy. A change that
   lengthens that path has to earn its place before anything else about it is
   discussed.
-- Use `must`, `always`, and `never` only for invariants that admit no
-  reasonable exception. Express preferences and situational decisions with
-  `prefer`, `should`, or other qualified wording. Do not apply a rule literally
-  where doing so would defeat the repository's stated purpose, intended
-  behavior, compatibility, safety, or approved change scope. Where the
-  applicable specifications and policy leave a legitimate choice open, an
-  explicit maintainer decision governs that choice. General conventions do not
-  override it.
+
+Use `must`, `always`, and `never` only for invariants that admit no reasonable
+exception. Express preferences and situational decisions with `prefer`,
+`should`, or other qualified wording.
+
+Do not apply a rule literally where doing so would defeat the repository's
+stated purpose, intended behavior, compatibility, safety, or approved change
+scope.
+
+Where the applicable specifications and policy leave a legitimate choice
+open, an explicit maintainer decision governs that choice. General
+conventions do not override it.
+
+Documentation work, policy work, review, diagnostics, cleanup, or another
+task whose stated scope does not include an implementation change must not
+expand into one merely because an improvement opportunity is discovered.
+
+Before changing established behavior, weigh the probability and impact of the
+failure being prevented against the added complexity, new failure modes,
+compatibility risk, operational cost, maintenance cost, and rollback cost.
+
+A safety-motivated change is not automatically justified by Safety having
+priority over Efficiency. Added complexity can itself create new failure
+modes, compatibility risk, operational risk, and maintenance cost. Evaluate
+the proposed change as a whole.
+
+Behavior that has operated reliably over time is evidence and has value of
+its own. Do not refactor established infrastructure merely because another
+design appears cleaner, more modern, or more defensive.
+
+An implementation change is made only when that change has been explicitly
+chosen as part of the work being performed. Before deployment, validate it in
+the supported and representative environments affected by the change. A
+successful check in one convenient environment is not sufficient evidence for
+a change whose compatibility risk extends to other supported environments.
 
 ### 1.4 Invariants
 These lines are not crossed by a setting or by an extension.
@@ -488,24 +531,20 @@ the configured generation API
 - Each entry opens with a heading of the form `vX.Y.Z (YYYY-MM-DD)`, or
   `vX.Y.Z (Release Date: TBD)` while it is unreleased, underlined with `-`
   characters, followed by one `-` bullet per change.
-- Write one coherent change as one bullet, at most two physical lines. A
-  single line at or under 80 columns is preferred whenever practical. This is
-  an explicit limit, not a prompt to reread: an entry that runs past two
-  lines, or a single line that runs past 80 columns without necessity, must
-  be shortened. The file is read as a list and reviewed as a diff, and both
-  are served by an entry that stays within this limit.
-- An entry that has to name a file, a command, a function, an option or a
-  setting may pass 80 columns on its one or two lines when those names cannot
-  be shortened without losing meaning. The two-line ceiling still applies.
+- Write one coherent change per bullet, at most two physical lines.
+- A single line at or under 80 columns is preferred whenever practical.
+  Names and identifiers necessary to describe the change may pass 80 columns
+  on the bullet's one or two lines when they cannot be shortened without
+  losing meaning.
+- When a version history already exists, balance a new entry against the
+  length of the existing lines, so that the whole file stays consistent.
+  Holding to the form this file has settled on comes before the two-line,
+  80-column limit above, and leaves that limit standing wherever no such
+  form exists.
 - `doc/VERSIONS` carries these guidelines again at its foot, and an entry
   written into it follows the limit recorded there.
 - The first entry, at the lowest version `doc/VERSIONS` reaches, reads only
   `Initial release.` and nothing else.
-- Where the file has settled on a width of its own, predating this limit, a
-  new entry is wrapped to that width and balanced against the lines already
-  standing, so that the version history stays of a piece. Wrapping to hold an
-  established form does not overturn the two-line, 80-column limit above. The
-  entries already written are not reflowed or rebuilt to suit it.
 - When an entry runs long, look first for what can be dropped or abstracted:
   the implementation detail, the example, the detailed reason, the secondary
   effect. Wrap onto the second line only when the abstracted entry still
@@ -646,6 +685,20 @@ the configured generation API
 - Before changing a file name or a line width, find out why the current form
   was chosen.
 
+A concrete specification has exactly one authoritative home appropriate to the
+responsibility that owns it. Other documents may link to or summarize that
+specification for navigation, but they do not create a competing normative
+copy.
+
+The implementation is the primary evidence of what currently happens. It is
+not, by itself, proof that the current behavior is the intended specification.
+
+When implementation and documentation disagree, compare the implementation,
+documented interface, component header, history, existing design, and
+maintenance intent. If the implementation contains a regression, do not adopt
+that regression as the specification merely because it is present in the
+current code.
+
 #### 1.17.10 The Language of the Repository
 - The code, the comments, the identifiers, the documents, the screens and the
   prompts are written in English.
@@ -655,28 +708,63 @@ the configured generation API
   specification — a formula the reply must not fall into, a phrase it must not
   add — the string is quoted literally, because an English translation of it
   would match nothing.
-- Write English explanatory prose in clear, natural sentences. Do not replace a
-  sentence with a label and a colon, a status prefix such as `Implement:` or
-  `Incompatible:`, a symbol, or an unexplained abbreviation. Apply this to
-  English prose in comments, docstrings, documentation, version histories,
-  release notes, commit messages, and pull request descriptions. This rule does
-  not alter the established forms of headings, list labels, tables, code,
-  configuration syntax, machine-readable fields, literal interface strings, or
-  non-English content required by the repository's purpose. Do not rewrite
-  historical entries or unrelated text merely to align their style.
+
+Write English explanatory prose in clear, natural sentences. Do not replace a
+sentence with a label and a colon, a status prefix such as `Implement:` or
+`Incompatible:`, a symbol, or an unexplained abbreviation.
+
+Apply this to English prose in comments, docstrings, documentation, version
+histories, release notes, commit messages, and pull request descriptions.
+
+This rule does not alter the established forms of headings, list labels,
+tables, code, configuration syntax, machine-readable fields, literal
+interface strings, or non-English content required by the repository's
+purpose.
+
+Wrap ordinary prose at approximately 80 columns where practical. Preserve
+the logical structure of paragraphs, lists, and other document elements.
+Do not break URLs, code, tables, identifiers, or other elements whose
+structure requires a longer line.
+
+Shared boilerplate must retain its common wording, line breaks, blank lines,
+and formatting. Do not reformat it independently in individual repositories.
+Its established common form takes precedence over the ordinary line-wrapping
+guideline.
+
+Do not rewrite historical entries or unrelated text merely to align their
+style.
 
 ### 1.18 Pull Request Scope and History
-A pull request presents the change it proposes, not the sequence of corrections
-that produced it. It carries one purpose, and when the direction is revised part
-way through a review, the branch is rewritten so that it reads as the change
-finally intended, and merges as if it had been written that way.
+A pull request carries one coherent higher-level purpose, which may require
+coordinated changes across several files or responsibilities.
 
-An automated agent must not commit or push directly to `master`.
-It must commit authorized changes to a work branch and submit them through
-a pull request targeting the approved base branch. Creating or updating a
-pull request does not authorize the agent to merge it or enable auto-merge.
-Either action requires an explicit instruction from the maintainer. This
-paragraph does not change a human maintainer's authority.
+Do not split one approved purpose mechanically by individual finding, file,
+or review comment, and do not include unrelated cleanup, formatting, or
+feature work.
+
+Represent one coherent change as one commit and amend review corrections
+instead of accumulating follow-up commits.
+
+Rewriting the history of a branch under review requires an explicit
+instruction from the maintainer. When such a rewrite is authorized, use
+`--force-with-lease` and limit the operation to the branch under review.
+
+Check the final branch against its base to remove abandoned intermediate
+wording and work. Merge only with explicit maintainer approval.
+
+Unless explicitly instructed otherwise by the maintainer, an automated agent
+must commit authorized changes to a work branch and submit them through a
+pull request targeting the approved base branch.
+
+An automated agent must not commit or push directly to `master` without
+explicit instructions from the maintainer authorizing that operation.
+
+Creating or updating a pull request does not authorize the agent to merge it
+or enable auto-merge. Either action requires an explicit instruction from
+the maintainer.
+
+Authorization for one operation does not imply authorization for another.
+These rules do not change a human maintainer's authority.
 
 #### 1.18.1 One Purpose to a Pull Request
 - "Purpose" means the higher-level reason the pull request exists, not an
@@ -709,9 +797,6 @@ paragraph does not change a human maintainer's authority.
   says why.
 
 #### 1.18.2 Keeping a Branch to Its Change
-- A branch that carries one coherent change carries it as one commit. That
-  commit is amended and force pushed with `--force-with-lease`, rather than
-  gaining a further commit for each remark received.
 - Commits such as "fix review comment", "address feedback" or "resolve
   conflict" describe the review rather than the change, and do not belong in
   the history that is merged.
@@ -720,11 +805,6 @@ paragraph does not change a human maintainer's authority.
   bullet: coherence, not chronology.
 
 #### 1.18.3 Leaving No Trace of the Correction
-- Each revision is read against the base branch, not against the revision
-  before it, so that a correction leaves no residue in the diff that is merged.
-- A correction withdraws what it replaces. Code, comments and wording
-  introduced by an earlier revision and since abandoned are removed, not left
-  standing beside their replacement.
 - Conflicts with the base branch are resolved by rebasing onto it, so that no
   merge commit enters the branch.
 - A rewritten branch invalidates the copies others have fetched. Force pushing
@@ -737,6 +817,11 @@ paragraph does not change a human maintainer's authority.
 ---
 
 ### 1.19 Judging a Change
+Before accepting a change, ask whether it is the smallest coherent change that
+serves its purpose, whether it alters behavior outside that purpose, whether it
+adds an unnecessary dependency or side effect, whether it exposes private
+information, and whether directly affected documentation remains correct.
+
 Before a change is proposed, it answers these:
 
 - Does it cross an Invariant? Then it is not made.
@@ -748,7 +833,6 @@ Before a change is proposed, it answers these:
 - Does it widen what leaves the process, or what is kept after the request
   ends?
 - Does it add a dependency, and does that dependency earn its place?
-- Is it the smallest change that serves its purpose?
 - Does a test fail without it?
 - Which documents change with it: the module header, `.env.example`, the
   README, the prompt specification, `doc/VERSIONS`?
@@ -762,6 +846,10 @@ that the requirements are incomplete, and that is where it is taken.
 - Every module header repeats the license line of the standard identifying
   block, so that a file read on its own still states its terms.
 - Add a dependency only when its license is compatible with that choice.
+
+Content adapted from an external article, answer, documentation example, source
+file, dataset, or other third-party material credits its source and respects
+the license or redistribution terms that apply to it.
 
 ## 2. Python Policy
 
@@ -955,6 +1043,10 @@ that the requirements are incomplete, and that is where it is taken.
 - Documentation must be updated in sync with behavior changes. A change to what
   a prompt asks for updates the prompt specification in the same change.
 
+A comment preserves a reason, constraint, non-obvious intent, or decision that
+a later change could otherwise undo. Do not use comments merely to restate code
+whose operation is already evident.
+
 #### 2.7.1 When to Bump a Module Version
 - These rules apply to the `Version History` in each module header. Repository
   release versions and Git tags follow the separate rules below.
@@ -996,18 +1088,25 @@ that the requirements are incomplete, and that is where it is taken.
 - The first entry, at the lowest version the file's own history reaches,
   reads only `Initial release.` and nothing else.
 
-#### 2.7.2 Module Version Numbering
-- Versions use a two-level `major.minor` scheme.
+#### 2.7.2 Source File Version Numbering
+
+These rules apply to individual source files that carry their own version
+history. Repository release versions are governed separately.
+
+- Source file versions use a two-level `major.minor` scheme.
 - When incrementing `minor` would reach `10`, roll over instead: increment
   `major` by 1 and reset `minor` to `0` (for example `v0.9` -> `v1.0`,
-  `v1.9` -> `v2.0`).
+  `v1.9` -> `v2.0`, `v2.9` -> `v3.0`).
 - Do not continue `minor` past `9` as in standard semantic versioning
   (do not use `v1.10`, `v1.11`, ...).
 - Raising `major` for a reason other than the rollover is a decision the
-  maintainer makes, not one this document derives from the change. An
-  incompatible change is described as such in `doc/VERSIONS` and in the
-  `Version History` entry, and the number it is released under is chosen then.
+  maintainer makes, not one this document derives from the change.
 - Removing or renaming an option, changing what an existing argument means,
   changing a default so that an unchanged invocation does something else, and
   changing how a path or a configuration value is resolved are all incompatible
-  changes in that sense.
+  changes. Say so in the `Version History` entry, so that the number the change
+  is released under can be chosen knowing that.
+
+An incompatible change that meets the repository-level history criteria is
+also described as incompatible in `doc/VERSIONS`. The source-file history
+and repository release history remain independent.
