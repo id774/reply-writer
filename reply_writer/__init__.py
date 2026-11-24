@@ -38,7 +38,7 @@ import secrets
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
