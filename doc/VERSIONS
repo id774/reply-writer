@@ -1,8 +1,8 @@
 reply-writer Repository Version History
 =======================================
 
-v1.0.3 (Release Date: TBD)
---------------------------
+v1.0.3 (2026-11-24)
+-------------------
 - Clarify policy governance, pull request scope and automated agent workflows.
 - Reject surrounding whitespace in generation base URLs before API requests.
 - Report reply delivery and input restoration accurately on error pages.
